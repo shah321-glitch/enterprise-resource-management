@@ -11,3 +11,4 @@ router.use(requireAdmin);
 router.get('/', listAuditLogs);
 
 export default router;
+

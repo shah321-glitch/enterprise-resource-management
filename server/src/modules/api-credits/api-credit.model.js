@@ -81,3 +81,4 @@ apiCreditAccountSchema.index({ provider: 1, creditModel: 1 });
 apiCreditAccountSchema.index({ reportedBalance: 1, thresholdLimit: 1 });
 
 export const ApiCreditAccount = mongoose.model('ApiCreditAccount', apiCreditAccountSchema);
+

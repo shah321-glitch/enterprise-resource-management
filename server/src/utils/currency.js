@@ -59,3 +59,4 @@ export const assertSameCurrency = (items, defaultCurrency = 'USD') => {
   }
   return firstCurrency;
 };
+

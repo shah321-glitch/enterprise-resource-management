@@ -87,3 +87,4 @@ export const getCategorySummary = async (req, res, next) => {
     next(error);
   }
 };
+

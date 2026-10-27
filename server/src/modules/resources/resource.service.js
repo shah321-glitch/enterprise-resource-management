@@ -175,3 +175,4 @@ export const getCategorySummary = async () => {
     { $sort: { totalCostInCents: -1 } },
   ]);
 };
+

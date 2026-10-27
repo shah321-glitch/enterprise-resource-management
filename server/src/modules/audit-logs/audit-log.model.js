@@ -72,3 +72,4 @@ auditLogSchema.pre('findOneAndUpdate', function () {
 });
 
 export const AuditLog = mongoose.model('AuditLog', auditLogSchema);
+

@@ -529,3 +529,4 @@ const seedDatabase = async () => {
 };
 
 seedDatabase();
+

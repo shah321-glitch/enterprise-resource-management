@@ -14,3 +14,4 @@ router.post('/', requireProjectManagerOrAdmin, validate({ body: createAllocation
 router.delete('/:id', requireProjectManagerOrAdmin, allocationController.terminateAllocation);
 
 export default router;
+

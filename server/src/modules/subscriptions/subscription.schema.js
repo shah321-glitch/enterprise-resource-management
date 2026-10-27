@@ -38,3 +38,4 @@ export const subscriptionQuerySchema = z.object({
   billingFrequency: z.string().optional(),
   upcomingDays: z.coerce.number().int().positive().optional(),
 });
+

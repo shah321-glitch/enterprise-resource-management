@@ -14,3 +14,4 @@ export const getConnectorForProvider = (providerKey, config = {}) => {
       return new MockProviderConnector(config);
   }
 };
+

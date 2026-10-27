@@ -239,3 +239,4 @@ export const getRecurringForecasts = async (monthsAhead = 6) => {
 
   return forecasts;
 };
+

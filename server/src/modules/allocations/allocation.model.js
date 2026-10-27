@@ -71,3 +71,4 @@ allocationSchema.index({ resourceId: 1, status: 1 });
 allocationSchema.index({ projectId: 1, status: 1 });
 
 export const ResourceAllocation = mongoose.model('ResourceAllocation', allocationSchema);
+

@@ -109,3 +109,4 @@ classDiagram
 
 - **Resilience**: Connectors encapsulate retry logic with exponential backoff and jitter, timeout limits, and standardized error classification (`AUTHENTICATION_ERROR`, `RATE_LIMIT_ERROR`, `QUOTA_EXCEEDED`, `NETWORK_ERROR`).
 - **Safety**: Secret credentials are stored encrypted in the database or retrieved from environment variables; credentials are never transmitted to frontend clients.
+

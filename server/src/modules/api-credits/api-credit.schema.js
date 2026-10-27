@@ -20,3 +20,4 @@ export const recordUsageSchema = z.object({
   amount: z.coerce.number().positive('Usage amount must be greater than 0'),
   description: z.string().optional(),
 });
+

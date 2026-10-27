@@ -109,3 +109,4 @@ subscriptionSchema.index({ status: 1, nextRenewalDate: 1 });
 subscriptionSchema.index({ provider: 1, status: 1 });
 
 export const Subscription = mongoose.model('Subscription', subscriptionSchema);
+

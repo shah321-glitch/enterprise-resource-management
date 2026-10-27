@@ -544,3 +544,4 @@ export const SubscriptionsPage = () => {
     </div>
   );
 };
+

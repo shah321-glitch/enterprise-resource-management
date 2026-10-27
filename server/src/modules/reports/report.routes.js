@@ -10,3 +10,4 @@ router.get('/dashboard-stats', reportController.getDashboardStats);
 router.get('/export/:type', reportController.exportReportCSV);
 
 export default router;
+

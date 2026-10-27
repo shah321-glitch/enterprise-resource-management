@@ -524,3 +524,4 @@ export const ResourcesPage = () => {
     </div>
   );
 };
+

@@ -32,3 +32,4 @@ export function getDaysRemaining(targetDate) {
   const diffTime = target.getTime() - now.getTime();
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
+

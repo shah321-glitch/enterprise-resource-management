@@ -59,3 +59,4 @@ export class MockProviderConnector extends BaseConnector {
     };
   }
 }
+

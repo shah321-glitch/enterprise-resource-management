@@ -50,3 +50,4 @@ export const TableCell = ({ className, children, ...props }) => (
     {children}
   </td>
 );
+

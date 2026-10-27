@@ -20,3 +20,4 @@ export const Input = React.forwardRef(({ className, type = 'text', error, ...pro
 });
 
 Input.displayName = 'Input';
+

@@ -33,3 +33,4 @@ export const resourceQuerySchema = z.object({
   sortBy: z.string().optional().default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
 });
+

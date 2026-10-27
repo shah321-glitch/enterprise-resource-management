@@ -92,3 +92,4 @@ export const markAllAsRead = async (userId) => {
   );
   return { message: 'All notifications marked as read' };
 };
+

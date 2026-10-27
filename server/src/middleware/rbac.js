@@ -55,3 +55,4 @@ export const requireMinRole = (minRole) => {
 export const requireAdmin = requireRole([ROLES.SUPER_ADMIN, ROLES.ADMIN]);
 export const requireSuperAdmin = requireRole([ROLES.SUPER_ADMIN]);
 export const requireProjectManagerOrAdmin = requireRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PROJECT_MANAGER]);
+

@@ -40,3 +40,4 @@
 - **Context**: Microservices introduce excessive operational complexity for a single-company enterprise resource system, while an unstructured monolith becomes difficult to maintain.
 - **Decision**: Modular monolithic backend organized by domain feature modules, with an abstract `BaseConnector` pattern for provider integrations.
 - **Consequences**: Clear separation of concerns, testability, and painless extension to new third-party providers.
+

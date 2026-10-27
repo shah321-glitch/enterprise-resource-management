@@ -24,3 +24,4 @@ router.post('/:id/renew', requireProjectManagerOrAdmin, validate({ body: renewSu
 router.post('/:id/cancel', requireAdmin, validate({ body: cancelSubscriptionSchema }), subscriptionController.cancelSubscription);
 
 export default router;
+

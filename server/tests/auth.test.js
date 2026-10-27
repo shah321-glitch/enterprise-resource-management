@@ -187,3 +187,4 @@ describe('Auth & Security API Integration Tests', () => {
     expect(Array.isArray(adminRes.body.data)).toBe(true);
   });
 });
+

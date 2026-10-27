@@ -26,3 +26,4 @@ export const Select = React.forwardRef(({ className, error, options = [], childr
 });
 
 Select.displayName = 'Select';
+

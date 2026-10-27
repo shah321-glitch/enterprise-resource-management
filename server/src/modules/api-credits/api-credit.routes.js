@@ -17,3 +17,4 @@ router.post('/:id/usage', requireProjectManagerOrAdmin, validate({ body: recordU
 router.post('/:id/sync', requireProjectManagerOrAdmin, apiCreditController.syncCreditAccount);
 
 export default router;
+

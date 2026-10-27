@@ -32,3 +32,4 @@ export const disconnectDatabase = async () => {
     logger.error({ err: error }, 'Error disconnecting MongoDB');
   }
 };
+

@@ -22,3 +22,4 @@ export const updateAllocationSchema = z.object({
   usageLimit: z.coerce.number().optional(),
   notes: z.string().optional(),
 });
+

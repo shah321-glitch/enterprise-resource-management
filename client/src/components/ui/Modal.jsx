@@ -53,3 +53,4 @@ export const Modal = ({ isOpen, onClose, title, description, children, className
     </div>
   );
 };
+

@@ -107,3 +107,4 @@ export class BaseConnector {
     return new ConnectorError(message, 'UNKNOWN_ERROR', err);
   }
 }
+

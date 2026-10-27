@@ -155,3 +155,4 @@ The repository uses npm workspaces with `server` and `client` directories:
 - **Database Operations**: Use Mongoose schemas with compound indexes for common queries (e.g., `{ status: 1, nextRenewalDate: 1 }`).
 - **Tests**: Every new module or fix must include integration tests covering success paths, validation errors, and authorization checks.
 - **Provider Integrations**: Must inherit from the `BaseConnector` class and implement standard methods (`testConnection`, `getBalance`, `getUsage`, `getMetadata`). Live provider connections must never be simulated or claimed as successful without real network confirmation or explicit mock test status.
+

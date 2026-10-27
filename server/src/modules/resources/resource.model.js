@@ -98,3 +98,4 @@ resourceSchema.index({ provider: 1, category: 1, status: 1 });
 resourceSchema.index({ isArchived: 1, status: 1 });
 
 export const Resource = mongoose.model('Resource', resourceSchema);
+

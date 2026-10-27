@@ -45,3 +45,4 @@ Backend checks use the `requireRole(['ADMIN', 'SUPER_ADMIN'])` middleware. Front
 - Secrets, database passwords, and third-party connector tokens are loaded strictly via environment variables.
 - Structured logger (Pino) sanitizes and masks sensitive fields (`password`, `authorization`, `token`, `secret`, `cookie`).
 - Financial audit logs cannot be modified or deleted through the API interface.
+

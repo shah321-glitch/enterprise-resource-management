@@ -13,3 +13,4 @@ router.put('/:id', requireAdmin, userController.updateUser);
 router.patch('/:id/status', requireSuperAdmin, userController.setUserStatus);
 
 export default router;
+

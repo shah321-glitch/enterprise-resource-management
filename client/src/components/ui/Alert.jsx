@@ -31,3 +31,4 @@ export const Alert = ({ className, variant = 'info', title, children, ...props }
     </div>
   );
 };
+

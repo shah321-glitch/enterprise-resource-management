@@ -30,3 +30,4 @@ export const expenseQuerySchema = z.object({
   year: z.coerce.number().int().optional(),
   month: z.coerce.number().int().min(1).max(12).optional(),
 });
+

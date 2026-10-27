@@ -50,3 +50,4 @@ export const updateProject = async (req, res, next) => {
     next(error);
   }
 };
+

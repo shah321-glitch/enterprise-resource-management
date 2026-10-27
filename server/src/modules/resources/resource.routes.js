@@ -18,3 +18,4 @@ router.patch('/:id/archive', requireAdmin, resourceController.archiveResource);
 router.delete('/:id', requireAdmin, resourceController.deleteResource);
 
 export default router;
+

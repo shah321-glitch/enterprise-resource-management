@@ -18,3 +18,4 @@ router.put('/:id', requireAdmin, validate({ body: updateExpenseSchema }), expens
 router.delete('/:id', requireAdmin, expenseController.deleteExpense);
 
 export default router;
+

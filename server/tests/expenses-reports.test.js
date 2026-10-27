@@ -140,3 +140,4 @@ describe('Expenses & Business Reports API Integration Tests', () => {
     expect(res.text).toContain('CLOUD_INFRASTRUCTURE');
   });
 });
+

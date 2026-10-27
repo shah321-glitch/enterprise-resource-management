@@ -132,3 +132,4 @@ All API responses adhere to a consistent JSON structure:
 |---|---|---|---|
 | `GET` | `/audit-logs` | Filterable immutable audit trail | Super Admin, Admin |
 | `GET` | `/audit-logs/:id` | Full payload diff and metadata | Super Admin, Admin |
+

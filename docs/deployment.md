@@ -64,3 +64,4 @@ GitHub Actions workflow is located at `.github/workflows/ci.yml`:
 4. Executes backend integration tests against MongoDB Memory Server.
 5. Executes frontend component and unit tests with Vitest.
 6. Builds production artifacts for client and server.
+

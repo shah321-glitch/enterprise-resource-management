@@ -15,3 +15,4 @@ router.post('/', requireProjectManagerOrAdmin, validate({ body: createProjectSch
 router.put('/:id', requireProjectManagerOrAdmin, validate({ body: updateProjectSchema }), projectController.updateProject);
 
 export default router;
+
