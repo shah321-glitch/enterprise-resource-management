@@ -1,0 +1,33 @@
+{
+  "name": "enterprise-resource-management",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise Resource & Subscription Management System (ERSMS)",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=server & npm run dev --workspace=client",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=server && npm run build --workspace=client",
+    "build:server": "npm run build --workspace=server",
+    "build:client": "npm run build --workspace=client",
+    "test": "npm run test --workspaces --if-present",
+    "test:server": "npm run test --workspace=server",
+    "test:client": "npm run test --workspace=client",
+    "lint": "npm run lint --workspaces --if-present",
+    "seed": "npm run seed --workspace=server"
+  },
+  "keywords": [
+    "enterprise",
+    "resource-management",
+    "subscriptions",
+    "mern",
+    "api-credits",
+    "expenses"
+  ],
+  "author": "ERSMS Team",
+  "license": "UNLICENSED"
+}

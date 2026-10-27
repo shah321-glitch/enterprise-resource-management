@@ -1,0 +1,170 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Enterprise Resource & Subscription Management System (ERSMS) API",
+    "version": "1.0.0",
+    "description": "Enterprise-grade REST API for governing digital assets, SaaS/cloud subscriptions, multi-unit API credits, project resource allocations, and financial expenses."
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "ERSMS V1 REST API"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "StandardResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "type": "object" },
+          "message": { "type": "string" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "example": "BAD_REQUEST" },
+              "message": { "type": "string" },
+              "details": { "type": "array", "items": { "type": "object" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Liveness check",
+        "tags": ["System"],
+        "responses": { "200": { "description": "System is healthy" } }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "summary": "Readiness probe",
+        "tags": ["System"],
+        "responses": { "200": { "description": "Database and dependencies connected" } }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Authenticate user",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Authenticated successfully with access and refresh tokens" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "summary": "Rotate access token",
+        "tags": ["Authentication"],
+        "responses": {
+          "200": { "description": "Tokens rotated" },
+          "401": { "description": "Invalid or reused token" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Get authenticated user profile",
+        "tags": ["Authentication"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Current profile" }
+        }
+      }
+    },
+    "/resources": {
+      "get": {
+        "summary": "List digital resources with filters",
+        "tags": ["Resources"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "List of resources" } }
+      },
+      "post": {
+        "summary": "Create new digital resource",
+        "tags": ["Resources"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "201": { "description": "Resource created" } }
+      }
+    },
+    "/subscriptions": {
+      "get": {
+        "summary": "List subscriptions",
+        "tags": ["Subscriptions"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "List of subscriptions" } }
+      }
+    },
+    "/projects": {
+      "get": {
+        "summary": "List projects",
+        "tags": ["Projects"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "List of projects" } }
+      }
+    },
+    "/allocations": {
+      "get": {
+        "summary": "List resource allocations",
+        "tags": ["Allocations"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "List of allocations" } }
+      }
+    },
+    "/api-credits": {
+      "get": {
+        "summary": "List API credit pools and quota balances",
+        "tags": ["API Credits"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Credit pool list" } }
+      }
+    },
+    "/expenses": {
+      "get": {
+        "summary": "List actual paid expenses",
+        "tags": ["Expenses"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Expenses list" } }
+      }
+    },
+    "/reports/dashboard-stats": {
+      "get": {
+        "summary": "Executive KPI statistics for dashboard",
+        "tags": ["Reports & Analytics"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Dashboard statistics" } }
+      }
+    }
+  }
+}
