@@ -1,5 +1,5 @@
 import express from 'express';
-import mongoose from 'mongoose';
+import { getDbDetails } from '../../config/db.js';
 
 const router = express.Router();
 
@@ -12,8 +12,8 @@ export const healthHandler = (req, res) => {
 };
 
 export const readyHandler = (req, res) => {
-  const isDbReady = mongoose.connection.readyState === 1;
-  if (!isDbReady) {
+  const db = getDbDetails();
+  if (!db.isConnected) {
     return res.status(503).json({
       status: 'unready',
       database: 'disconnected',
@@ -24,6 +24,7 @@ export const readyHandler = (req, res) => {
   res.status(200).json({
     status: 'ready',
     database: 'connected',
+    mode: db.mode,
     timestamp: new Date().toISOString(),
   });
 };

@@ -13,12 +13,15 @@ import { ApiCreditAccount } from '../modules/api-credits/api-credit.model.js';
 import { Expense } from '../modules/expenses/expense.model.js';
 import { Notification } from '../modules/notifications/notification.model.js';
 import { AuditLog } from '../modules/audit-logs/audit-log.model.js';
+import { fileURLToPath } from 'url';
 import { connectDatabase, disconnectDatabase } from '../config/db.js';
 import { logger } from '../config/logger.js';
 
-const seedDatabase = async () => {
+export const runSeed = async (standalone = true) => {
   try {
-    await connectDatabase();
+    if (standalone) {
+      await connectDatabase();
+    }
     logger.info('Starting enterprise database seed process...');
 
     // Clean existing seed collections
@@ -524,14 +527,24 @@ const seedDatabase = async () => {
     logger.info('Seeded audit logs.');
     logger.info('*** Enterprise Database Seeding Completed Successfully! ***');
 
-    await disconnectDatabase();
-    process.exit(0);
+    if (standalone) {
+      await disconnectDatabase();
+      process.exit(0);
+    }
+    return true;
   } catch (err) {
     logger.fatal({ err }, 'Failed to seed enterprise database');
-    await disconnectDatabase();
-    process.exit(1);
+    if (standalone) {
+      await disconnectDatabase();
+      process.exit(1);
+    }
+    throw err;
   }
 };
 
-seedDatabase();
+// Auto-run if executed directly
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  runSeed(true);
+}
+
 

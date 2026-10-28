@@ -7,6 +7,7 @@ import swaggerUi from 'swagger-ui-express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import mongoose from 'mongoose';
 
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
@@ -106,6 +107,42 @@ export const createApp = () => {
   // Health and Readiness probes
   app.use('/api/v1/health', healthRoutes);
   app.get('/api/v1/ready', readyHandler);
+
+  // Root endpoint - redirect browsers to Swagger docs or return JSON
+  app.get('/', (req, res) => {
+    if (req.accepts('html')) {
+      return res.redirect('/api/docs');
+    }
+    res.status(200).json({
+      name: 'Enterprise Resource & Subscription Management System (ERSMS) API',
+      version: '1.0.0',
+      status: 'online',
+      endpoints: {
+        health: '/api/v1/health',
+        ready: '/api/v1/ready',
+        docs: '/api/docs',
+        api: '/api/v1',
+      },
+    });
+  });
+
+  // Database availability guard for transactional API routes
+  app.use('/api/v1', (req, res, next) => {
+    if (req.path === '/health' || req.path === '/ready') {
+      return next();
+    }
+    const isDbConnected = mongoose.connection.readyState === 1;
+    if (!isDbConnected) {
+      return res.status(503).json({
+        success: false,
+        error: {
+          code: 'DATABASE_UNAVAILABLE',
+          message: 'Database connection is temporarily unavailable. Please verify database connectivity.',
+        },
+      });
+    }
+    next();
+  });
 
   // Feature Module Routes
   app.use('/api/v1/auth', authRoutes);
