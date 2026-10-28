@@ -10,3 +10,4 @@ if (fs.existsSync(clientDist)) {
 } else {
   console.log('client/dist not found yet, skipping copy');
 }
+
