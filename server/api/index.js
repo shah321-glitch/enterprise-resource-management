@@ -4,16 +4,27 @@ import { connectDatabase } from '../src/config/db.js';
 let appInstance = null;
 
 export default async function handler(req, res) {
-  // Await database connection on every invocation (warm connections resolve immediately)
   try {
     await connectDatabase();
   } catch (err) {
-    console.error('Serverless database connection error:', err.message);
+    console.error('Serverless DB connection error:', err.message);
   }
 
-  if (!appInstance) {
-    appInstance = createApp();
+  try {
+    if (!appInstance) {
+      appInstance = createApp();
+    }
+    return appInstance(req, res);
+  } catch (err) {
+    console.error('Express handler error:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'INTERNAL_SERVER_ERROR',
+          message: err.message || 'An unexpected server error occurred',
+        },
+      });
+    }
   }
-
-  return appInstance(req, res);
 }
