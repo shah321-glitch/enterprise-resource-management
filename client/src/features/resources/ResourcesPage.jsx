@@ -11,22 +11,26 @@ import {
   Eye,
   Archive,
   Trash2,
-  ExternalLink,
   DollarSign,
   Calendar,
 } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { formatCurrency, formatDate } from '../../lib/utils.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { PageHeader } from '../../components/ui/PageHeader.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Input } from '../../components/ui/Input.jsx';
 import { Select } from '../../components/ui/Select.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Modal } from '../../components/ui/Modal.jsx';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog.jsx';
+import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table.jsx';
-import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { TableSkeleton } from '../../components/ui/Skeleton.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
+import { Pagination } from '../../components/ui/Pagination.jsx';
 
 const resourceFormSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -50,6 +54,7 @@ const resourceFormSchema = z.object({
 export const ResourcesPage = () => {
   const { isProjectManager, isAdmin } = useAuth();
   const queryClient = useQueryClient();
+  const toast = useToast();
 
   // Filters & Pagination State
   const [page, setPage] = useState(1);
@@ -110,6 +115,10 @@ export const ResourcesPage = () => {
       queryClient.invalidateQueries({ queryKey: ['resource-categories-summary'] });
       setIsCreateOpen(false);
       reset();
+      toast.success('Digital resource registered successfully');
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to create resource');
     },
   });
 
@@ -120,6 +129,10 @@ export const ResourcesPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resources'] });
+      toast.success('Resource status updated to archived');
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to archive resource');
     },
   });
 
@@ -132,6 +145,10 @@ export const ResourcesPage = () => {
       queryClient.invalidateQueries({ queryKey: ['resources'] });
       queryClient.invalidateQueries({ queryKey: ['resource-categories-summary'] });
       setDeleteConfirmId(null);
+      toast.success('Resource deleted permanently');
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to delete resource');
     },
   });
 
@@ -156,58 +173,62 @@ export const ResourcesPage = () => {
   });
 
   const resources = data?.data || [];
-  const meta = data?.meta || { total: 0, totalPages: 1 };
+  const meta = data?.meta || { total: 0, totalPages: 1, page: 1, limit: 10 };
 
   return (
     <div className="space-y-6">
-      {/* Title & Actions Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Digital Resources</h1>
-          <p className="text-sm text-muted-foreground">
-            Inventory management of cloud assets, SaaS subscriptions, licenses, and DNS records
-          </p>
-        </div>
-
-        {isProjectManager && (
-          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow-sm">
-            <Plus className="h-4 w-4" />
-            <span>Add Resource</span>
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Digital Resources"
+        description="Comprehensive inventory of enterprise cloud servers, SaaS accounts, domains, licenses, and security tools."
+        breadcrumbs={[{ label: 'Resources' }]}
+        badge={
+          <Badge variant="outline" className="font-mono text-xs">
+            {meta.total} assets
+          </Badge>
+        }
+        actions={
+          isProjectManager && (
+            <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow-sm">
+              <Plus className="h-4 w-4" />
+              <span>Add Resource</span>
+            </Button>
+          )
+        }
+      />
 
       {/* Category Cost Breakdown Cards */}
       {categorySummaryData && categorySummaryData.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {categorySummaryData.slice(0, 6).map((cat) => (
-            <div key={cat._id} className="p-3 rounded-xl border border-border bg-card/60 flex flex-col justify-between">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase truncate">
-                {cat._id.replace('_', ' ')}
-              </span>
-              <div className="mt-2">
-                <p className="text-base font-bold text-foreground">{formatCurrency(cat.totalCostInCents)}</p>
-                <span className="text-[10px] text-muted-foreground">{cat.count} asset{cat.count > 1 ? 's' : ''}</span>
-              </div>
-            </div>
+          {categorySummaryData.map((cat) => (
+            <Card key={cat._id} className="bg-card/60 hover:bg-card transition-colors">
+              <CardContent className="p-3.5 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground truncate block">
+                  {cat._id?.replace('_', ' ') || 'OTHER'}
+                </span>
+                <p className="text-base font-bold text-foreground">
+                  {formatCurrency(cat.totalCostInCents, 'USD')}
+                </p>
+                <span className="text-[11px] text-muted-foreground block">
+                  {cat.count} {cat.count === 1 ? 'item' : 'items'}
+                </span>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
       {/* Filter and Search Bar */}
-      <Card>
+      <Card className="bg-card/75">
         <CardContent className="p-4 flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search by name, provider, description..."
+          <div className="flex-1 relative">
+            <Input
+              startIcon={Search}
+              placeholder="Search by resource name, provider, or type..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full h-9 pl-9 pr-4 rounded-md border border-input bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
 
@@ -250,13 +271,21 @@ export const ResourcesPage = () => {
 
       {/* Resources Table */}
       {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} className="h-14 w-full rounded-lg" />
-          ))}
-        </div>
+        <TableSkeleton rows={6} cols={6} />
       ) : error ? (
         <Alert variant="destructive">{error.message || 'Error loading resources'}</Alert>
+      ) : resources.length === 0 ? (
+        <EmptyState
+          icon={Server}
+          title="No resources found"
+          description={
+            search || category || status
+              ? 'No digital assets match your filter criteria. Try adjusting your search query.'
+              : 'Your enterprise has not registered any digital resources yet.'
+          }
+          actionLabel={isProjectManager ? 'Add First Resource' : undefined}
+          onAction={isProjectManager ? () => setIsCreateOpen(true) : undefined}
+        />
       ) : (
         <div className="space-y-4">
           <Table>
@@ -271,99 +300,82 @@ export const ResourcesPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {resources.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground text-sm">
-                    No resources match the selected criteria
+              {resources.map((res) => (
+                <TableRow key={res._id}>
+                  <TableCell>
+                    <div>
+                      <span className="font-semibold text-foreground block">{res.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {res.provider} &bull; {res.resourceType}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{res.category.replace('_', ' ')}</Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{res.department}</TableCell>
+                  <TableCell className="font-semibold text-foreground">
+                    {formatCurrency(res.costInCents, res.currency)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      dot
+                      variant={
+                        res.status === 'ACTIVE'
+                          ? 'success'
+                          : res.status === 'MAINTENANCE'
+                          ? 'warning'
+                          : 'secondary'
+                      }
+                    >
+                      {res.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setSelectedResource(res)}
+                        title="View Details"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {isAdmin && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => archiveMutation.mutate(res._id)}
+                            title="Archive Resource"
+                          >
+                            <Archive className="h-4 w-4 text-amber-500" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeleteConfirmId(res._id)}
+                            title="Delete Resource"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
-              ) : (
-                resources.map((res) => (
-                  <TableRow key={res._id}>
-                    <TableCell>
-                      <div>
-                        <span className="font-semibold text-foreground block">{res.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {res.provider} &bull; {res.resourceType}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{res.category.replace('_', ' ')}</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{res.department}</TableCell>
-                    <TableCell className="font-semibold text-foreground">
-                      {formatCurrency(res.costInCents, res.currency)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={res.status === 'ACTIVE' ? 'success' : res.status === 'MAINTENANCE' ? 'warning' : 'secondary'}>
-                        {res.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setSelectedResource(res)}
-                          title="View Details"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {isAdmin && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => archiveMutation.mutate(res._id)}
-                              title="Archive Resource"
-                            >
-                              <Archive className="h-4 w-4 text-amber-500" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setDeleteConfirmId(res._id)}
-                              title="Delete Resource"
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
 
-          {/* Pagination Controls */}
-          {meta.totalPages > 1 && (
-            <div className="flex items-center justify-between text-xs text-muted-foreground px-2">
-              <span>
-                Showing page {meta.page} of {meta.totalPages} ({meta.total} total assets)
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= meta.totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
+          {/* Pagination */}
+          <Pagination
+            currentPage={page}
+            totalPages={meta.totalPages}
+            totalItems={meta.total}
+            pageSize={10}
+            onPageChange={(p) => setPage(p)}
+          />
         </div>
       )}
 
@@ -374,83 +386,90 @@ export const ResourcesPage = () => {
         title="Register Digital Resource"
         description="Add a new digital asset, cloud service, or tool to company inventory"
       >
-        <form onSubmit={handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Resource Name</label>
-            <Input placeholder="e.g. AWS Production EKS" error={errors.name?.message} {...register('name')} />
+        <form onSubmit={handleSubmit((formData) => createMutation.mutate(formData))} className="space-y-4">
+          <Input
+            label="Resource Name"
+            placeholder="e.g. AWS Production EKS"
+            error={errors.name?.message}
+            {...register('name')}
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Provider"
+              placeholder="AWS, GitHub, Figma"
+              error={errors.provider?.message}
+              {...register('provider')}
+            />
+            <Select
+              label="Category"
+              error={errors.category?.message}
+              {...register('category')}
+              options={[
+                { value: 'CLOUD_INFRASTRUCTURE', label: 'Cloud Infrastructure' },
+                { value: 'SAAS_TOOL', label: 'SaaS Tool' },
+                { value: 'DEVELOPER_TOOL', label: 'Developer Tool' },
+                { value: 'SECURITY', label: 'Security' },
+                { value: 'DOMAIN_DNS', label: 'Domain & DNS' },
+                { value: 'OTHER', label: 'Other' },
+              ]}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Provider</label>
-              <Input placeholder="AWS, GitHub, Figma" error={errors.provider?.message} {...register('provider')} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Category</label>
-              <Select
-                options={[
-                  { value: 'CLOUD_INFRASTRUCTURE', label: 'Cloud Infrastructure' },
-                  { value: 'SAAS_TOOL', label: 'SaaS Tool' },
-                  { value: 'DEVELOPER_TOOL', label: 'Developer Tool' },
-                  { value: 'SECURITY', label: 'Security' },
-                  { value: 'DOMAIN_DNS', label: 'Domain & DNS' },
-                  { value: 'OTHER', label: 'Other' },
-                ]}
-                {...register('category')}
-              />
-            </div>
+            <Input
+              label="Resource Type"
+              placeholder="e.g. PostgreSQL Cluster"
+              {...register('resourceType')}
+            />
+            <Input
+              label="Department"
+              placeholder="e.g. Core Engineering"
+              {...register('department')}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Resource Type</label>
-              <Input placeholder="VM, API Key, License" {...register('resourceType')} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Department</label>
-              <Input placeholder="Engineering, DevOps" {...register('department')} />
-            </div>
+            <Input
+              label="Monthly Cost (USD)"
+              type="number"
+              step="0.01"
+              error={errors.costDollars?.message}
+              {...register('costDollars')}
+            />
+            <Select
+              label="Initial Status"
+              {...register('status')}
+              options={[
+                { value: 'ACTIVE', label: 'Active' },
+                { value: 'INACTIVE', label: 'Inactive' },
+                { value: 'MAINTENANCE', label: 'Maintenance' },
+              ]}
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Base Cost (USD)</label>
-              <Input type="number" step="0.01" error={errors.costDollars?.message} {...register('costDollars')} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Status</label>
-              <Select
-                options={[
-                  { value: 'ACTIVE', label: 'Active' },
-                  { value: 'INACTIVE', label: 'Inactive' },
-                  { value: 'MAINTENANCE', label: 'Maintenance' },
-                ]}
-                {...register('status')}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">Description / Notes</label>
             <textarea
-              className="w-full h-20 rounded-md border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              placeholder="Operational details, SLAs, or server specs..."
+              className="flex w-full rounded-xl border border-input bg-card/60 px-3 py-2 text-xs sm:text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              rows={3}
+              placeholder="Operational details, cluster region, IAM accounts..."
               {...register('description')}
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            <Button variant="secondary" onClick={() => setIsCreateOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" isLoading={isSubmitting || createMutation.isPending}>
-              Create Resource
+            <Button type="submit" isLoading={createMutation.isPending || isSubmitting}>
+              Register Resource
             </Button>
           </div>
         </form>
       </Modal>
 
-      {/* View Resource Detail Modal */}
+      {/* Resource Detail Modal */}
       {selectedResource && (
         <Modal
           isOpen={Boolean(selectedResource)}
@@ -458,25 +477,28 @@ export const ResourcesPage = () => {
           title={selectedResource.name}
           description={`${selectedResource.provider} • ${selectedResource.resourceType}`}
         >
-          <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4 p-3 rounded-lg bg-secondary/50 border border-border">
-              <div>
-                <span className="text-xs text-muted-foreground block">Category</span>
-                <span className="font-semibold text-foreground">{selectedResource.category.replace('_', ' ')}</span>
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="p-3 rounded-xl bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block mb-0.5">Category</span>
+                <span className="font-semibold text-foreground">{selectedResource.category}</span>
               </div>
-              <div>
-                <span className="text-xs text-muted-foreground block">Department</span>
+              <div className="p-3 rounded-xl bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block mb-0.5">Department</span>
                 <span className="font-semibold text-foreground">{selectedResource.department}</span>
               </div>
-              <div>
-                <span className="text-xs text-muted-foreground block">Cost</span>
-                <span className="font-semibold text-foreground">
+              <div className="p-3 rounded-xl bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block mb-0.5">Monthly Cost</span>
+                <span className="font-semibold text-foreground text-sm">
                   {formatCurrency(selectedResource.costInCents, selectedResource.currency)}
                 </span>
               </div>
-              <div>
-                <span className="text-xs text-muted-foreground block">Status</span>
-                <Badge variant={selectedResource.status === 'ACTIVE' ? 'success' : 'secondary'}>
+              <div className="p-3 rounded-xl bg-secondary/50 border border-border">
+                <span className="text-muted-foreground block mb-0.5">Status</span>
+                <Badge
+                  dot
+                  variant={selectedResource.status === 'ACTIVE' ? 'success' : 'secondary'}
+                >
                   {selectedResource.status}
                 </Badge>
               </div>
@@ -485,13 +507,13 @@ export const ResourcesPage = () => {
             {selectedResource.description && (
               <div>
                 <span className="text-xs font-semibold text-muted-foreground block mb-1">Description</span>
-                <p className="text-sm text-foreground bg-muted/20 p-2.5 rounded-lg border border-border">
+                <p className="text-xs text-foreground bg-secondary/30 p-3 rounded-xl border border-border leading-relaxed">
                   {selectedResource.description}
                 </p>
               </div>
             )}
 
-            <div className="text-xs text-muted-foreground pt-2 flex justify-between border-t border-border">
+            <div className="text-xs text-muted-foreground pt-3 flex justify-between border-t border-border">
               <span>Created: {formatDate(selectedResource.createdAt)}</span>
               <span>Updated: {formatDate(selectedResource.updatedAt)}</span>
             </div>
@@ -500,28 +522,15 @@ export const ResourcesPage = () => {
       )}
 
       {/* Delete Confirmation Modal */}
-      {deleteConfirmId && (
-        <Modal
-          isOpen={Boolean(deleteConfirmId)}
-          onClose={() => setDeleteConfirmId(null)}
-          title="Confirm Permanent Deletion"
-          description="Are you sure you want to permanently delete this resource record? This action cannot be undone."
-        >
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              isLoading={deleteMutation.isPending}
-              onClick={() => deleteMutation.mutate(deleteConfirmId)}
-            >
-              Delete Permanently
-            </Button>
-          </div>
-        </Modal>
-      )}
+      <ConfirmDialog
+        isOpen={Boolean(deleteConfirmId)}
+        onClose={() => setDeleteConfirmId(null)}
+        onConfirm={() => deleteMutation.mutate(deleteConfirmId)}
+        isLoading={deleteMutation.isPending}
+        title="Permanently Delete Resource?"
+        description="This will permanently delete this digital resource record from the company inventory and cannot be recovered."
+        confirmText="Delete Resource"
+      />
     </div>
   );
 };
-

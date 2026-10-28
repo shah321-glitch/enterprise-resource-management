@@ -7,14 +7,18 @@ import { Plus, Share2, Trash2, AlertCircle, CheckCircle, Calculator } from 'luci
 import { api } from '../../lib/api.js';
 import { formatCurrency, formatDate } from '../../lib/utils.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { PageHeader } from '../../components/ui/PageHeader.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Input } from '../../components/ui/Input.jsx';
 import { Select } from '../../components/ui/Select.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Modal } from '../../components/ui/Modal.jsx';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog.jsx';
+import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table.jsx';
-import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { TableSkeleton } from '../../components/ui/Skeleton.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
 
 const allocationSchema = z.object({
@@ -27,8 +31,9 @@ const allocationSchema = z.object({
 export const AllocationsPage = () => {
   const { isProjectManager } = useAuth();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [allocationError, setAllocationError] = useState(null);
+  const [terminateConfirmId, setTerminateConfirmId] = useState(null);
 
   // Queries
   const { data: allocationsData, isLoading, error } = useQuery({
@@ -58,27 +63,37 @@ export const AllocationsPage = () => {
   // Create allocation mutation
   const createMutation = useMutation({
     mutationFn: async (formData) => {
-      await api.post('/allocations', formData);
+      const payload = {
+        resourceId: formData.resourceId,
+        projectId: formData.projectId,
+        allocationMethod: formData.allocationMethod,
+        allocationValue: Number(formData.allocationValue),
+      };
+      await api.post('/allocations', payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['allocations'] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
       setIsModalOpen(false);
       reset();
+      toast.success('Resource allocated to project successfully');
     },
     onError: (err) => {
-      setAllocationError(err.response?.data?.error?.message || err.message || 'Allocation failed');
+      toast.error(err.message || 'Failed to allocate resource');
     },
   });
 
   // Terminate allocation mutation
   const terminateMutation = useMutation({
     mutationFn: async (id) => {
-      await api.delete(`/allocations/${id}`);
+      await api.patch(`/allocations/${id}/terminate`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['allocations'] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setTerminateConfirmId(null);
+      toast.success('Allocation terminated and capacity returned to resource pool');
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to terminate allocation');
     },
   });
 
@@ -98,129 +113,103 @@ export const AllocationsPage = () => {
     },
   });
 
-  const watchedResourceId = watch('resourceId');
-  const watchedMethod = watch('allocationMethod');
-  const watchedValue = watch('allocationValue');
-
-  const selectedResource = resourcesData?.find((r) => r._id === watchedResourceId);
-
-  // Calculate live preview cost
-  let previewCost = 0;
-  if (selectedResource) {
-    if (watchedMethod === 'PERCENTAGE') {
-      previewCost = Math.round((selectedResource.costInCents * (watchedValue || 0)) / 100);
-    } else if (watchedMethod === 'FIXED_AMOUNT') {
-      previewCost = Math.round((watchedValue || 0) * 100);
-    } else {
-      previewCost = selectedResource.costInCents;
-    }
-  }
-
+  const selectedMethod = watch('allocationMethod');
   const allocations = allocationsData || [];
+  const resources = resourcesData || [];
+  const projects = projectsData || [];
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Resource Allocations</h1>
-          <p className="text-sm text-muted-foreground">
-            Configure multi-method cost and capacity sharing (Percentage, Equal, Fixed, Usage) across projects
-          </p>
-        </div>
+      <PageHeader
+        title="Resource Allocations"
+        description="Safely distribute digital infrastructure, SaaS seats, and cloud costs across projects with percentage limit validation to eliminate double-counting."
+        breadcrumbs={[{ label: 'Allocations' }]}
+        badge={
+          <Badge variant="outline" className="font-mono text-xs">
+            {allocations.length} active assignments
+          </Badge>
+        }
+        actions={
+          isProjectManager && (
+            <Button onClick={() => setIsModalOpen(true)} className="gap-2 shadow-sm">
+              <Plus className="h-4 w-4" />
+              <span>Assign Resource to Project</span>
+            </Button>
+          )
+        }
+      />
 
-        {isProjectManager && (
-          <Button
-            onClick={() => {
-              setAllocationError(null);
-              setIsModalOpen(true);
-            }}
-            className="gap-2 shadow-sm"
-          >
-            <Plus className="h-4 w-4" />
-            <span>New Allocation</span>
-          </Button>
-        )}
-      </div>
-
+      {/* Allocation Matrix Table */}
       {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-lg" />
-          ))}
-        </div>
+        <TableSkeleton rows={5} cols={6} />
       ) : error ? (
         <Alert variant="destructive">{error.message || 'Error loading allocations'}</Alert>
+      ) : allocations.length === 0 ? (
+        <EmptyState
+          icon={Share2}
+          title="No resource allocations"
+          description="None of your digital resources are currently assigned to project initiatives."
+          actionLabel={isProjectManager ? 'Create Allocation' : undefined}
+          onAction={isProjectManager ? () => setIsModalOpen(true) : undefined}
+        />
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Resource</TableHead>
-              <TableHead>Project Target</TableHead>
+              <TableHead>Assigned Project</TableHead>
               <TableHead>Method</TableHead>
-              <TableHead>Allocation</TableHead>
+              <TableHead>Share</TableHead>
               <TableHead>Allocated Cost</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Action</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {allocations.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-10 text-muted-foreground text-sm">
-                  No active or past resource allocations recorded
+            {allocations.map((alloc) => (
+              <TableRow key={alloc._id}>
+                <TableCell>
+                  <div>
+                    <span className="font-semibold text-foreground block">{alloc.resourceId?.name || 'Resource'}</span>
+                    <span className="text-xs text-muted-foreground">{alloc.resourceId?.provider}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div>
+                    <span className="font-semibold text-foreground block">{alloc.projectId?.name || 'Project'}</span>
+                    <span className="text-xs font-mono text-muted-foreground">{alloc.projectId?.code}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">{alloc.allocationMethod}</Badge>
+                </TableCell>
+                <TableCell className="font-mono font-semibold text-foreground">
+                  {alloc.allocationMethod === 'PERCENTAGE'
+                    ? `${alloc.allocationValue}%`
+                    : alloc.allocationValue}
+                </TableCell>
+                <TableCell className="font-bold text-foreground">
+                  {formatCurrency(alloc.allocatedCostInCents, alloc.currency || 'USD')}
+                </TableCell>
+                <TableCell>
+                  <Badge dot variant={alloc.status === 'ACTIVE' ? 'success' : 'secondary'}>
+                    {alloc.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  {alloc.status === 'ACTIVE' && isProjectManager && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTerminateConfirmId(alloc._id)}
+                      className="text-xs text-destructive hover:bg-destructive/10"
+                    >
+                      Release
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
-            ) : (
-              allocations.map((alloc) => (
-                <TableRow key={alloc._id}>
-                  <TableCell>
-                    <div>
-                      <span className="font-semibold text-foreground block">{alloc.resourceId?.name || 'Resource'}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {alloc.resourceId?.provider} ({formatCurrency(alloc.resourceId?.costInCents)})
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-medium text-foreground">{alloc.projectId?.name || 'Project'}</span>
-                    <span className="text-xs text-muted-foreground block font-mono">
-                      {alloc.projectId?.code}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{alloc.allocationMethod}</Badge>
-                  </TableCell>
-                  <TableCell className="font-semibold text-foreground">
-                    {alloc.allocationMethod === 'PERCENTAGE'
-                      ? `${alloc.allocationValue}%`
-                      : alloc.allocationMethod === 'FIXED_AMOUNT'
-                      ? formatCurrency(alloc.allocationValue)
-                      : 'Equal'}
-                  </TableCell>
-                  <TableCell className="font-bold text-foreground">
-                    {formatCurrency(alloc.calculatedCostInCents, alloc.currency)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={alloc.status === 'ACTIVE' ? 'success' : 'secondary'}>
-                      {alloc.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {alloc.status === 'ACTIVE' && isProjectManager && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:bg-destructive/10 text-xs"
-                        isLoading={terminateMutation.isPending}
-                        onClick={() => terminateMutation.mutate(alloc._id)}
-                      >
-                        Terminate
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
+            ))}
           </TableBody>
         </Table>
       )}
@@ -230,87 +219,77 @@ export const AllocationsPage = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Allocate Resource to Project"
-        description="Share infrastructure cost and capacity with strict non-double-counting guarantees"
+        description="Define project cost-sharing parameters. Total active percentages across projects cannot exceed 100%."
       >
-        <form onSubmit={handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
-          {allocationError && <Alert variant="destructive">{allocationError}</Alert>}
+        <form onSubmit={handleSubmit((formData) => createMutation.mutate(formData))} className="space-y-4">
+          <Select
+            label="Digital Resource"
+            error={errors.resourceId?.message}
+            {...register('resourceId')}
+            options={[
+              { value: '', label: '-- Select Digital Resource --' },
+              ...resources.map((r) => ({
+                value: r._id,
+                label: `${r.name} (${r.provider} - ${formatCurrency(r.costInCents, r.currency)}/mo)`,
+              })),
+            ]}
+          />
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Select Resource</label>
-            <Select error={errors.resourceId?.message} {...register('resourceId')}>
-              <option value="">-- Choose Resource --</option>
-              {resourcesData?.map((r) => (
-                <option key={r._id} value={r._id}>
-                  {r.name} ({r.provider}) - {formatCurrency(r.costInCents)}/mo
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Assign to Project</label>
-            <Select error={errors.projectId?.message} {...register('projectId')}>
-              <option value="">-- Choose Project --</option>
-              {projectsData?.map((p) => (
-                <option key={p._id} value={p._id}>
-                  [{p.code}] {p.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <Select
+            label="Target Project"
+            error={errors.projectId?.message}
+            {...register('projectId')}
+            options={[
+              { value: '', label: '-- Select Target Project --' },
+              ...projects.map((p) => ({
+                value: p._id,
+                label: `${p.name} [${p.code}] - ${p.department}`,
+              })),
+            ]}
+          />
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Allocation Model</label>
-              <Select
-                options={[
-                  { value: 'PERCENTAGE', label: 'Percentage (%)' },
-                  { value: 'EQUAL', label: 'Equal Split' },
-                  { value: 'FIXED_AMOUNT', label: 'Fixed Amount ($)' },
-                  { value: 'USAGE_BASED', label: 'Usage Based (%)' },
-                ]}
-                {...register('allocationMethod')}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">
-                {watchedMethod === 'PERCENTAGE' || watchedMethod === 'USAGE_BASED'
-                  ? 'Value (0 - 100%)'
-                  : 'Fixed Amount (USD)'}
-              </label>
-              <Input
-                type="number"
-                step="1"
-                error={errors.allocationValue?.message}
-                {...register('allocationValue')}
-              />
-            </div>
+            <Select
+              label="Allocation Method"
+              {...register('allocationMethod')}
+              options={[
+                { value: 'PERCENTAGE', label: 'Percentage (%)' },
+                { value: 'EQUAL', label: 'Equal Split' },
+                { value: 'FIXED_AMOUNT', label: 'Fixed Dollar Amount' },
+                { value: 'USAGE_BASED', label: 'Usage Based' },
+              ]}
+            />
+
+            <Input
+              label={selectedMethod === 'PERCENTAGE' ? 'Percentage Share (%)' : 'Allocation Value'}
+              type="number"
+              step={selectedMethod === 'PERCENTAGE' ? '1' : '0.01'}
+              error={errors.allocationValue?.message}
+              {...register('allocationValue')}
+            />
           </div>
 
-          {/* Real-time preview calculation card */}
-          {selectedResource && (
-            <div className="p-3 rounded-lg bg-secondary/50 border border-border flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <Calculator className="h-4 w-4 text-primary" />
-                <span className="text-muted-foreground">Calculated Monthly Cost:</span>
-              </div>
-              <span className="font-bold text-foreground text-sm">
-                {formatCurrency(previewCost, selectedResource.currency)}
-              </span>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" isLoading={isSubmitting || createMutation.isPending}>
+            <Button type="submit" isLoading={createMutation.isPending || isSubmitting}>
               Confirm Allocation
             </Button>
           </div>
         </form>
       </Modal>
+
+      {/* Confirm Release Modal */}
+      <ConfirmDialog
+        isOpen={Boolean(terminateConfirmId)}
+        onClose={() => setTerminateConfirmId(null)}
+        onConfirm={() => terminateMutation.mutate(terminateConfirmId)}
+        isLoading={terminateMutation.isPending}
+        title="Terminate Resource Allocation?"
+        description="This will release the resource from the project and free its allocated capacity."
+        confirmText="Release Allocation"
+      />
     </div>
   );
 };
-

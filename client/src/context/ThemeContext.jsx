@@ -1,20 +1,35 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-const ThemeContext = createContext();
+const ThemeContext = createContext(null);
 
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('ersms_theme') || 'dark';
+    try {
+      const stored = localStorage.getItem('ersms_theme');
+      if (stored === 'light' || stored === 'dark') {
+        return stored;
+      }
+      if (typeof window !== 'undefined' && window.matchMedia) {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+    } catch {
+      // Fallback in environments with blocked storage
+    }
+    return 'dark';
   });
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
+    try {
+      const root = document.documentElement;
+      if (theme === 'dark') {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+      localStorage.setItem('ersms_theme', theme);
+    } catch {
+      // Fallback
     }
-    localStorage.setItem('ersms_theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {
@@ -22,7 +37,7 @@ export const ThemeProvider = ({ children }) => {
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme, isDark: theme === 'dark' }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -35,4 +50,3 @@ export const useTheme = () => {
   }
   return context;
 };
-

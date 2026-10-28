@@ -3,15 +3,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Search, Briefcase, DollarSign, Calendar, Layers } from 'lucide-react';
+import { Plus, Search, Briefcase, DollarSign, Calendar, Layers, CheckCircle2 } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { formatCurrency, formatDate } from '../../lib/utils.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { PageHeader } from '../../components/ui/PageHeader.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Input } from '../../components/ui/Input.jsx';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Modal } from '../../components/ui/Modal.jsx';
+import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
 
@@ -26,6 +29,7 @@ const projectSchema = z.object({
 export const ProjectsPage = () => {
   const { isProjectManager } = useAuth();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -52,6 +56,10 @@ export const ProjectsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setIsCreateOpen(false);
       reset();
+      toast.success('Corporate project initiated successfully');
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to create project');
     },
   });
 
@@ -75,101 +83,98 @@ export const ProjectsPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Projects Governance</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage cost centers, project budgets, and allocated digital infrastructure
-          </p>
-        </div>
+      <PageHeader
+        title="Project Management"
+        description="Organize internal strategic initiatives, allocate digital resources, control project-specific budgets, and monitor multi-department cost distribution."
+        breadcrumbs={[{ label: 'Projects' }]}
+        badge={
+          <Badge variant="outline" className="font-mono text-xs">
+            {projects.length} initiatives
+          </Badge>
+        }
+        actions={
+          isProjectManager && (
+            <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow-sm">
+              <Plus className="h-4 w-4" />
+              <span>New Project</span>
+            </Button>
+          )
+        }
+      />
 
-        {isProjectManager && (
-          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow-sm">
-            <Plus className="h-4 w-4" />
-            <span>Create Project</span>
-          </Button>
-        )}
-      </div>
+      {/* Search Input */}
+      <Card className="bg-card/75">
+        <CardContent className="p-4">
+          <Input
+            startIcon={Search}
+            placeholder="Search projects by name, code, or department..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </CardContent>
+      </Card>
 
-      <div className="relative w-full max-w-md">
-        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Filter projects by title or code..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full h-9 pl-9 pr-4 rounded-md border border-input bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-      </div>
-
+      {/* Projects Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-48 w-full rounded-xl" />
+            <Skeleton key={i} className="h-56 rounded-2xl" />
           ))}
         </div>
       ) : error ? (
-        <Alert variant="destructive">{error.message || 'Failed to load projects'}</Alert>
+        <Alert variant="destructive">{error.message || 'Error loading projects'}</Alert>
+      ) : projects.length === 0 ? (
+        <EmptyState
+          icon={Briefcase}
+          title="No projects found"
+          description={
+            search
+              ? 'No projects match your search keywords.'
+              : 'There are no active company projects registered in the system yet.'
+          }
+          actionLabel={isProjectManager ? 'Create First Project' : undefined}
+          onAction={isProjectManager ? () => setIsCreateOpen(true) : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-sm text-muted-foreground">
-              No projects created yet
-            </div>
-          ) : (
-            projects.map((proj) => {
-              const allocatedCents = proj.allocatedCostInCents || 0;
-              const budgetCents = proj.budgetInCents || 0;
-              const pct = budgetCents > 0 ? Math.min(100, Math.round((allocatedCents / budgetCents) * 100)) : 0;
+          {projects.map((proj) => (
+            <Card key={proj._id} className="hover:shadow-md transition-all flex flex-col justify-between">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
+                    <Briefcase className="h-5 w-5" />
+                  </div>
+                  <Badge dot variant={proj.status === 'ACTIVE' ? 'success' : 'secondary'}>
+                    {proj.status}
+                  </Badge>
+                </div>
+                <div className="pt-2">
+                  <CardTitle className="text-base font-bold text-foreground">{proj.name}</CardTitle>
+                  <CardDescription className="font-mono text-xs text-primary font-medium">
+                    {proj.code} &bull; {proj.department}
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4 flex-1">
+                <p className="text-xs text-muted-foreground line-clamp-2">
+                  {proj.description || 'Enterprise project initiative.'}
+                </p>
 
-              return (
-                <Card key={proj._id} className="flex flex-col justify-between hover:border-primary/40 transition-colors">
-                  <CardHeader>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-primary/10 text-primary">
-                        {proj.code}
-                      </span>
-                      <Badge variant={proj.status === 'ACTIVE' ? 'success' : 'secondary'}>{proj.status}</Badge>
-                    </div>
-                    <CardTitle className="text-base">{proj.name}</CardTitle>
-                    <CardDescription className="line-clamp-2">{proj.description || 'No description provided'}</CardDescription>
-                  </CardHeader>
-
-                  <CardContent className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2 text-xs p-2.5 rounded-lg bg-secondary/40 border border-border">
-                      <div>
-                        <span className="text-muted-foreground block text-[11px]">Budget</span>
-                        <span className="font-semibold text-foreground">{formatCurrency(budgetCents)}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block text-[11px]">Allocated/Mo</span>
-                        <span className="font-semibold text-foreground">{formatCurrency(allocatedCents)}</span>
-                      </div>
-                    </div>
-
-                    {/* Budget utilization progress */}
-                    <div>
-                      <div className="flex justify-between text-[11px] mb-1">
-                        <span className="text-muted-foreground">Monthly Budget Used</span>
-                        <span className="font-semibold text-foreground">{pct}%</span>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${pct > 90 ? 'bg-destructive' : pct > 75 ? 'bg-amber-500' : 'bg-primary'}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="pt-2 flex justify-between items-center text-xs text-muted-foreground border-t border-border">
-                      <span>{proj.activeResourcesCount || 0} active resources</span>
-                      <span>{proj.department}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
+                <div className="p-3 bg-secondary/50 rounded-xl border border-border space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Authorized Budget:</span>
+                    <span className="font-bold text-foreground">
+                      {formatCurrency(proj.budgetInCents, proj.currency || 'USD')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-muted-foreground">Created:</span>
+                    <span className="text-muted-foreground">{formatDate(proj.createdAt)}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
@@ -177,46 +182,55 @@ export const ProjectsPage = () => {
       <Modal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        title="Create New Project"
-        description="Establish an enterprise project for resource and cost assignment"
+        title="Initiate Enterprise Project"
+        description="Create an authorized project container to assign digital resources and project members"
       >
-        <form onSubmit={handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Project Name</label>
-            <Input placeholder="e.g. AI Knowledge Assistant" error={errors.name?.message} {...register('name')} />
-          </div>
+        <form onSubmit={handleSubmit((formData) => createMutation.mutate(formData))} className="space-y-4">
+          <Input
+            label="Project Name"
+            placeholder="e.g. NextGen Core Platform"
+            error={errors.name?.message}
+            {...register('name')}
+          />
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Project Code</label>
-              <Input placeholder="PRJ-AI-01" error={errors.code?.message} {...register('code')} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Department</label>
-              <Input placeholder="Engineering" {...register('department')} />
-            </div>
+            <Input
+              label="Project Code"
+              placeholder="e.g. PRJ-CORE"
+              error={errors.code?.message}
+              {...register('code')}
+            />
+            <Input
+              label="Department"
+              placeholder="e.g. Platform Engineering"
+              {...register('department')}
+            />
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Target Budget (USD)</label>
-            <Input type="number" step="100" error={errors.budgetDollars?.message} {...register('budgetDollars')} />
-          </div>
+          <Input
+            label="Total Authorized Budget (USD)"
+            type="number"
+            step="100"
+            error={errors.budgetDollars?.message}
+            {...register('budgetDollars')}
+          />
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Description</label>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Description / Objectives</label>
             <textarea
-              className="w-full h-20 rounded-md border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              placeholder="Strategic goals and architecture scope..."
+              className="flex w-full rounded-xl border border-input bg-card/60 px-3 py-2 text-xs sm:text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              rows={3}
+              placeholder="Strategic goals, allocated team size, quarterly deliverables..."
               {...register('description')}
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            <Button variant="secondary" onClick={() => setIsCreateOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" isLoading={isSubmitting || createMutation.isPending}>
-              Create Project
+            <Button type="submit" isLoading={createMutation.isPending || isSubmitting}>
+              Initiate Project
             </Button>
           </div>
         </form>
@@ -224,4 +238,3 @@ export const ProjectsPage = () => {
     </div>
   );
 };
-

@@ -16,12 +16,15 @@ import {
 import { api } from '../../lib/api.js';
 import { formatCurrency, formatDate } from '../../lib/utils.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { PageHeader } from '../../components/ui/PageHeader.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Input } from '../../components/ui/Input.jsx';
 import { Select } from '../../components/ui/Select.jsx';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Modal } from '../../components/ui/Modal.jsx';
+import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
 
@@ -42,6 +45,7 @@ const usageSchema = z.object({
 export const ApiCreditsPage = () => {
   const { isProjectManager } = useAuth();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [usageAccount, setUsageAccount] = useState(null);
 
@@ -59,6 +63,10 @@ export const ApiCreditsPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-credits'] });
+      toast.success('Provider quota synchronization completed');
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to sync with provider');
     },
   });
 
@@ -70,6 +78,10 @@ export const ApiCreditsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['api-credits'] });
       setUsageAccount(null);
       resetUsage();
+      toast.success('Usage consumption recorded successfully');
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to record usage');
     },
   });
 
@@ -81,6 +93,10 @@ export const ApiCreditsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['api-credits'] });
       setIsCreateOpen(false);
       resetCreate();
+      toast.success('API credit account configured successfully');
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to create account');
     },
   });
 
@@ -88,16 +104,16 @@ export const ApiCreditsPage = () => {
     register: registerCreate,
     handleSubmit: handleCreateSubmit,
     reset: resetCreate,
-    formState: { errors: createErrors, isSubmitting: isCreateSubmitting },
+    formState: { errors: createErrors, isSubmitting: isCreating },
   } = useForm({
     resolver: zodResolver(createAccountSchema),
     defaultValues: {
       provider: 'OpenAI',
-      accountIdentifier: '',
+      accountIdentifier: 'org-production-team',
       creditModel: 'TOKEN_QUOTA',
       unit: 'TOKENS',
-      reportedBalance: 1000000,
-      thresholdLimit: 200000,
+      reportedBalance: 10000000,
+      thresholdLimit: 1000000,
     },
   });
 
@@ -105,221 +121,256 @@ export const ApiCreditsPage = () => {
     register: registerUsage,
     handleSubmit: handleUsageSubmit,
     reset: resetUsage,
-    formState: { errors: usageErrors, isSubmitting: isUsageSubmitting },
+    formState: { errors: usageErrors, isSubmitting: isRecording },
   } = useForm({
     resolver: zodResolver(usageSchema),
-    defaultValues: { amount: 1000, description: 'Batch model evaluation' },
+    defaultValues: {
+      amount: 1000,
+      description: 'Production query batch processing',
+    },
   });
 
   const accounts = data || [];
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">API Credits & Quota Pools</h1>
-          <p className="text-sm text-muted-foreground">
-            Strict isolation of monetary balances, HTTP request quotas, and LLM token pools with automated sync
-          </p>
-        </div>
+      <PageHeader
+        title="API Credit & Quota Telemetry"
+        description="Monitor LLM token balances, HTTP request quotas, monetary balances, and provider-specific consumption thresholds without conflating distinct metrics."
+        breadcrumbs={[{ label: 'API Credits' }]}
+        badge={
+          <Badge variant="outline" className="font-mono text-xs">
+            {accounts.length} monitored accounts
+          </Badge>
+        }
+        actions={
+          isProjectManager && (
+            <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow-sm">
+              <Plus className="h-4 w-4" />
+              <span>Track API Account</span>
+            </Button>
+          )
+        }
+      />
 
-        {isProjectManager && (
-          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow-sm">
-            <Plus className="h-4 w-4" />
-            <span>Register Account</span>
-          </Button>
-        )}
-      </div>
-
+      {/* Credit Accounts Grid */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-56 w-full rounded-xl" />
+            <Skeleton key={i} className="h-64 rounded-2xl" />
           ))}
         </div>
       ) : error ? (
         <Alert variant="destructive">{error.message || 'Error loading API credit accounts'}</Alert>
+      ) : accounts.length === 0 ? (
+        <EmptyState
+          icon={Cpu}
+          title="No API accounts tracked"
+          description="Your enterprise has not registered any third-party API quota accounts yet."
+          actionLabel={isProjectManager ? 'Add API Account' : undefined}
+          onAction={isProjectManager ? () => setIsCreateOpen(true) : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {accounts.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-sm text-muted-foreground">
-              No API credit pools registered
-            </div>
-          ) : (
-            accounts.map((acc) => {
-              const isLow = acc.reportedBalance <= acc.thresholdLimit;
-              const formattedBalance =
-                acc.unit === 'USD_CENTS'
-                  ? formatCurrency(acc.reportedBalance)
-                  : acc.reportedBalance.toLocaleString();
-              const formattedThreshold =
-                acc.unit === 'USD_CENTS'
-                  ? formatCurrency(acc.thresholdLimit)
-                  : acc.thresholdLimit.toLocaleString();
+          {accounts.map((acc) => {
+            const isLow = acc.reportedBalance <= acc.thresholdLimit;
 
-              return (
-                <Card key={acc._id} className={isLow ? 'border-destructive/40 bg-destructive/5' : ''}>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline">{acc.creditModel.replace('_', ' ')}</Badge>
-                      <Badge variant={isLow ? 'destructive' : 'success'}>
-                        {isLow ? 'Low Quota Alert' : 'Healthy'}
-                      </Badge>
+            return (
+              <Card key={acc._id} className="flex flex-col justify-between hover:shadow-md transition-all">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                      <Cpu className="h-5 w-5" />
                     </div>
-                    <CardTitle className="text-base mt-2">{acc.provider}</CardTitle>
-                    <CardDescription className="text-xs font-mono">{acc.accountIdentifier}</CardDescription>
-                  </CardHeader>
-
-                  <CardContent className="space-y-4">
-                    <div className="p-3 rounded-lg bg-card border border-border">
-                      <span className="text-xs text-muted-foreground block">Available Balance</span>
-                      <div className="flex items-baseline gap-1.5 mt-0.5">
-                        <span className="text-2xl font-extrabold text-foreground">{formattedBalance}</span>
-                        <span className="text-xs font-medium text-muted-foreground">{acc.unit}</span>
-                      </div>
-                      <span className="text-[11px] text-muted-foreground block mt-1">
-                        Alert threshold: {formattedThreshold} {acc.unit}
+                    <Badge dot variant={isLow ? 'destructive' : 'success'}>
+                      {isLow ? 'Low Balance' : 'Normal'}
+                    </Badge>
+                  </div>
+                  <div className="pt-2">
+                    <CardTitle className="text-base font-bold text-foreground">{acc.provider}</CardTitle>
+                    <CardDescription className="font-mono text-xs truncate">
+                      {acc.accountIdentifier}
+                    </CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4 flex-1">
+                  <div className="p-4 rounded-xl bg-secondary/50 border border-border space-y-2">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
+                        Available Balance:
+                      </span>
+                      <span className="text-xl font-bold font-mono text-foreground">
+                        {acc.creditModel === 'MONETARY'
+                          ? formatCurrency(acc.reportedBalance, 'USD')
+                          : acc.reportedBalance.toLocaleString()}
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5" />
-                        <span>Synced: {acc.lastSyncAt ? formatDate(acc.lastSyncAt) : 'Never'}</span>
-                      </div>
-                      <Badge variant={acc.syncStatus === 'SUCCESS' ? 'success' : 'secondary'}>
-                        {acc.syncStatus}
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">Credit Metric:</span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {acc.creditModel}
                       </Badge>
                     </div>
 
-                    <div className="flex gap-2 pt-2 border-t border-border">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 text-xs gap-1.5"
-                        isLoading={syncMutation.isPending && syncMutation.variables === acc._id}
-                        onClick={() => syncMutation.mutate(acc._id)}
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        <span>Sync Provider</span>
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="text-xs gap-1.5"
-                        onClick={() => setUsageAccount(acc)}
-                      >
-                        <MinusCircle className="h-3.5 w-3.5" />
-                        <span>Record Usage</span>
-                      </Button>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">Alert Threshold:</span>
+                      <span className="font-mono text-muted-foreground">
+                        {acc.creditModel === 'MONETARY'
+                          ? formatCurrency(acc.thresholdLimit, 'USD')
+                          : acc.thresholdLimit.toLocaleString()}
+                      </span>
                     </div>
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
+                  </div>
+
+                  <div className="text-[11px] text-muted-foreground flex justify-between items-center">
+                    <span>Last Sync: {formatDate(acc.lastSyncTime)}</span>
+                    <Badge variant={acc.syncStatus === 'SYNCED' ? 'success' : 'secondary'}>
+                      {acc.syncStatus}
+                    </Badge>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-border">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-1.5"
+                      isLoading={syncMutation.isPending}
+                      onClick={() => syncMutation.mutate(acc._id)}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>Sync</span>
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="flex-1 gap-1.5"
+                      onClick={() => setUsageAccount(acc)}
+                    >
+                      <MinusCircle className="h-3.5 w-3.5" />
+                      <span>Log Usage</span>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
-
-      {/* Register API Account Modal */}
-      <Modal
-        isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
-        title="Register API Account / Pool"
-        description="Add a provider-specific quota or prepaid credit balance"
-      >
-        <form onSubmit={handleCreateSubmit((data) => createMutation.mutate(data))} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Provider</label>
-            <Input placeholder="OpenAI, Anthropic, Stripe, AWS" error={createErrors.provider?.message} {...registerCreate('provider')} />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Account Identifier / Key Ref</label>
-            <Input placeholder="org-corp-01 or acct_prod_123" error={createErrors.accountIdentifier?.message} {...registerCreate('accountIdentifier')} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Credit Model</label>
-              <Select
-                options={[
-                  { value: 'TOKEN_QUOTA', label: 'Token Quota (Tokens)' },
-                  { value: 'REQUEST_QUOTA', label: 'Request Quota (Requests)' },
-                  { value: 'MONETARY', label: 'Monetary Balance (USD Cents)' },
-                  { value: 'UNIT_QUOTA', label: 'Custom Compute Credits' },
-                ]}
-                {...registerCreate('creditModel')}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Unit Label</label>
-              <Input placeholder="TOKENS, REQUESTS, USD_CENTS" {...registerCreate('unit')} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Initial Balance</label>
-              <Input type="number" error={createErrors.reportedBalance?.message} {...registerCreate('reportedBalance')} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Alert Threshold</label>
-              <Input type="number" error={createErrors.thresholdLimit?.message} {...registerCreate('thresholdLimit')} />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" isLoading={isCreateSubmitting || createMutation.isPending}>
-              Register Pool
-            </Button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Record Usage Modal */}
       {usageAccount && (
         <Modal
           isOpen={Boolean(usageAccount)}
           onClose={() => setUsageAccount(null)}
-          title={`Record API Usage: ${usageAccount.provider}`}
-          description={`Log consumption against ${usageAccount.accountIdentifier} (${usageAccount.unit})`}
+          title={`Log Usage: ${usageAccount.provider}`}
+          description={`Record manual consumption against ${usageAccount.accountIdentifier}`}
         >
           <form
-            onSubmit={handleUsageSubmit((data) =>
+            onSubmit={handleUsageSubmit((formData) =>
               recordUsageMutation.mutate({
                 id: usageAccount._id,
-                amount: data.amount,
-                description: data.description,
+                amount: Number(formData.amount),
+                description: formData.description,
               })
             )}
-            className="space-y-4"
+            className="space-y-4 pt-2"
           >
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Usage Amount ({usageAccount.unit})</label>
-              <Input type="number" error={usageErrors.amount?.message} {...registerUsage('amount')} />
-            </div>
+            <Input
+              label={`Consumed Amount (${usageAccount.unit})`}
+              type="number"
+              step="1"
+              error={usageErrors.amount?.message}
+              {...registerUsage('amount')}
+            />
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Operation / Reason</label>
-              <Input placeholder="e.g. Daily embedding sync" {...registerUsage('description')} />
-            </div>
+            <Input
+              label="Workload Description / Project Reference"
+              placeholder="Batch query execution for production index"
+              error={usageErrors.description?.message}
+              {...registerUsage('description')}
+            />
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setUsageAccount(null)}>
+            <div className="flex justify-end gap-2 pt-4 border-t border-border">
+              <Button variant="secondary" onClick={() => setUsageAccount(null)}>
                 Cancel
               </Button>
-              <Button type="submit" isLoading={isUsageSubmitting || recordUsageMutation.isPending}>
-                Deduct from Quota
+              <Button type="submit" isLoading={recordUsageMutation.isPending || isRecording}>
+                Record Usage
               </Button>
             </div>
           </form>
         </Modal>
       )}
+
+      {/* Track Account Modal */}
+      <Modal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        title="Track API Quota Account"
+        description="Monitor multi-model API credits, request quotas, and rate-limited developer accounts"
+      >
+        <form onSubmit={handleCreateSubmit((formData) => createMutation.mutate(formData))} className="space-y-4">
+          <Input
+            label="Provider"
+            placeholder="e.g. OpenAI, Anthropic, DeepSeek, Twilio"
+            error={createErrors.provider?.message}
+            {...registerCreate('provider')}
+          />
+
+          <Input
+            label="Account / Organization Identifier"
+            placeholder="e.g. org-corp-production"
+            error={createErrors.accountIdentifier?.message}
+            {...registerCreate('accountIdentifier')}
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Credit Model"
+              {...registerCreate('creditModel')}
+              options={[
+                { value: 'TOKEN_QUOTA', label: 'Token Quota (LLMs)' },
+                { value: 'REQUEST_QUOTA', label: 'HTTP Request Quota' },
+                { value: 'MONETARY', label: 'Monetary Balance (USD)' },
+                { value: 'UNIT_QUOTA', label: 'Custom Unit Quota' },
+              ]}
+            />
+
+            <Input
+              label="Unit Label"
+              placeholder="e.g. TOKENS, CALLS, CENTS"
+              {...registerCreate('unit')}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Initial Balance"
+              type="number"
+              error={createErrors.reportedBalance?.message}
+              {...registerCreate('reportedBalance')}
+            />
+
+            <Input
+              label="Low Balance Alert Threshold"
+              type="number"
+              error={createErrors.thresholdLimit?.message}
+              {...registerCreate('thresholdLimit')}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            <Button variant="secondary" onClick={() => setIsCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={createMutation.isPending || isCreating}>
+              Configure Account
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
-

@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ShieldAlert, Search, Eye, Filter, CheckCircle, XCircle } from 'lucide-react';
+import { ShieldAlert, Search, Eye, Filter, CheckCircle2, XCircle } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { formatDate } from '../../lib/utils.js';
+import { PageHeader } from '../../components/ui/PageHeader.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Modal } from '../../components/ui/Modal.jsx';
-import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { EmptyState } from '../../components/ui/EmptyState.jsx';
+import { TableSkeleton } from '../../components/ui/Skeleton.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
+import { Pagination } from '../../components/ui/Pagination.jsx';
 
 export const AuditLogsPage = () => {
   const [page, setPage] = useState(1);
@@ -34,21 +37,27 @@ export const AuditLogsPage = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Security Audit Trail</h1>
-        <p className="text-sm text-muted-foreground">
-          Immutable event log tracking administrative changes, resource lifecycle actions, and authentication events
-        </p>
-      </div>
+      <PageHeader
+        title="Security Audit Trail"
+        description="Append-only immutable record of all authentication attempts, resource modifications, subscription changes, and permission alterations."
+        breadcrumbs={[{ label: 'Audit Logs' }]}
+        badge={
+          <Badge variant="outline" className="font-mono text-xs">
+            {meta.total} audit events
+          </Badge>
+        }
+      />
 
       {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} className="h-14 w-full rounded-lg" />
-          ))}
-        </div>
+        <TableSkeleton rows={8} cols={6} />
       ) : error ? (
         <Alert variant="destructive">{error.message || 'Error loading audit logs'}</Alert>
+      ) : logs.length === 0 ? (
+        <EmptyState
+          icon={ShieldAlert}
+          title="No audit events found"
+          description="There are no security log entries recorded matching your filter."
+        />
       ) : (
         <div className="space-y-4">
           <Table>
@@ -59,118 +68,123 @@ export const AuditLogsPage = () => {
                 <TableHead>Action</TableHead>
                 <TableHead>Target Entity</TableHead>
                 <TableHead>Outcome</TableHead>
-                <TableHead className="text-right">Details</TableHead>
+                <TableHead className="text-right">Inspect</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {logs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground text-sm">
-                    No audit log records found
+              {logs.map((log) => (
+                <TableRow key={log._id}>
+                  <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                    {formatDate(log.createdAt, true)}
                   </TableCell>
-                </TableRow>
-              ) : (
-                logs.map((log) => (
-                  <TableRow key={log._id}>
-                    <TableCell className="text-xs text-muted-foreground font-mono">
-                      {new Date(log.createdAt).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <span className="font-semibold text-foreground text-xs block">{log.actorEmail || 'System'}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase">{log.actorRole || 'Internal'}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted text-foreground">
-                        {log.action}
+                  <TableCell>
+                    <div>
+                      <span className="font-semibold text-foreground text-xs block">
+                        {log.actorEmail || 'System / Automated'}
                       </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-foreground font-medium">{log.targetType}</span>
-                      {log.targetName && (
-                        <span className="text-[11px] text-muted-foreground block truncate max-w-[180px]">
-                          {log.targetName}
+                      {log.actorRole && (
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {log.actorRole}
                         </span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={log.outcome === 'SUCCESS' ? 'success' : 'destructive'}>
-                        {log.outcome}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => setSelectedLog(log)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="font-mono text-[10px]">
+                      {log.action}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    <span className="font-medium text-foreground">{log.targetName || log.targetType || '—'}</span>
+                    {log.targetType && (
+                      <span className="text-muted-foreground text-[10px] block">
+                        Type: {log.targetType}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      dot
+                      variant={log.outcome === 'SUCCESS' ? 'success' : 'destructive'}
+                    >
+                      {log.outcome}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSelectedLog(log)}
+                      title="Inspect Metadata"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
 
           {/* Pagination */}
-          {meta.totalPages > 1 && (
-            <div className="flex items-center justify-between text-xs text-muted-foreground px-2">
-              <span>
-                Page {meta.page} of {meta.totalPages} ({meta.total} audit events)
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= meta.totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            currentPage={page}
+            totalPages={meta.totalPages}
+            totalItems={meta.total}
+            pageSize={15}
+            onPageChange={(p) => setPage(p)}
+          />
         </div>
       )}
 
-      {/* Audit Log Detail JSON Modal */}
+      {/* Inspect Log Modal */}
       {selectedLog && (
         <Modal
           isOpen={Boolean(selectedLog)}
           onClose={() => setSelectedLog(null)}
           title={`Audit Event: ${selectedLog.action}`}
-          description={`Recorded on ${new Date(selectedLog.createdAt).toLocaleString()}`}
+          description={`Logged at ${formatDate(selectedLog.createdAt, true)}`}
+          className="max-w-xl"
         >
-          <div className="space-y-3 text-xs">
-            <div className="p-3 rounded-lg bg-secondary/50 border border-border grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-muted-foreground block">Actor</span>
+          <div className="space-y-4 pt-2 text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-secondary/50 rounded-xl border border-border">
+                <span className="text-muted-foreground block text-[10px] uppercase font-bold">Actor</span>
                 <span className="font-semibold text-foreground">{selectedLog.actorEmail || 'System'}</span>
+                <span className="text-muted-foreground text-[10px] block font-mono mt-0.5">
+                  Role: {selectedLog.actorRole || 'SYSTEM'}
+                </span>
               </div>
-              <div>
-                <span className="text-muted-foreground block">Role</span>
-                <span className="font-semibold text-foreground">{selectedLog.actorRole || 'System'}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Target Type</span>
-                <span className="font-semibold text-foreground">{selectedLog.targetType}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Target ID</span>
-                <span className="font-mono text-foreground truncate block">{selectedLog.targetId || '-'}</span>
+              <div className="p-3 bg-secondary/50 rounded-xl border border-border">
+                <span className="text-muted-foreground block text-[10px] uppercase font-bold">Outcome</span>
+                <Badge dot variant={selectedLog.outcome === 'SUCCESS' ? 'success' : 'destructive'} className="mt-1">
+                  {selectedLog.outcome}
+                </Badge>
               </div>
             </div>
 
+            {selectedLog.ipAddress && (
+              <div className="p-3 bg-secondary/50 rounded-xl border border-border space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Origin IP:</span>
+                  <span className="font-mono text-foreground">{selectedLog.ipAddress}</span>
+                </div>
+                {selectedLog.userAgent && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">User Agent:</span>
+                    <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[280px]">
+                      {selectedLog.userAgent}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
-              <span className="font-semibold text-muted-foreground block mb-1">Payload Metadata (Sanitized)</span>
-              <pre className="p-3 rounded-lg bg-muted text-foreground overflow-x-auto text-[11px] font-mono border border-border">
-                {JSON.stringify(selectedLog.details, null, 2)}
+              <span className="text-muted-foreground block text-[10px] uppercase font-bold mb-1.5">
+                Structured Event Metadata
+              </span>
+              <pre className="p-3 bg-secondary/70 border border-border rounded-xl font-mono text-[11px] overflow-x-auto text-foreground">
+                {JSON.stringify(selectedLog.details || {}, null, 2)}
               </pre>
             </div>
           </div>
@@ -179,4 +193,3 @@ export const AuditLogsPage = () => {
     </div>
   );
 };
-

@@ -4,17 +4,22 @@ import { Users, Search, ShieldCheck, UserX, UserCheck, Shield } from 'lucide-rea
 import { api } from '../../lib/api.js';
 import { formatDate } from '../../lib/utils.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
+import { PageHeader } from '../../components/ui/PageHeader.jsx';
 import { Button } from '../../components/ui/Button.jsx';
+import { Input } from '../../components/ui/Input.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Modal } from '../../components/ui/Modal.jsx';
 import { Select } from '../../components/ui/Select.jsx';
-import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { EmptyState } from '../../components/ui/EmptyState.jsx';
+import { TableSkeleton } from '../../components/ui/Skeleton.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
 
 export const UsersPage = () => {
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
 
   const [search, setSearch] = useState('');
@@ -33,8 +38,12 @@ export const UsersPage = () => {
     mutationFn: async ({ id, isActive }) => {
       await api.patch(`/users/${id}/status`, { isActive });
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success(`User account ${vars.isActive ? 'activated' : 'deactivated'}`);
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to update account status');
     },
   });
 
@@ -45,6 +54,10 @@ export const UsersPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setEditingUser(null);
+      toast.success('User role updated successfully');
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to update role');
     },
   });
 
@@ -52,151 +65,154 @@ export const UsersPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">User Management & Access Control</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage employee access, role promotions, and active session enforcement
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="User Access Control (RBAC)"
+        description="Oversee company employee accounts, assign granular role-based permissions, and manage active session lifecycles."
+        breadcrumbs={[{ label: 'Users' }]}
+        badge={
+          <Badge variant="outline" className="font-mono text-xs">
+            {users.length} members
+          </Badge>
+        }
+      />
 
-      <div className="relative w-full max-w-md">
-        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Search employees by name or email..."
+      {/* Search Input */}
+      <div className="max-w-md">
+        <Input
+          startIcon={Search}
+          placeholder="Filter by employee name, email, or department..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full h-9 pl-9 pr-4 rounded-md border border-input bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
 
+      {/* Users Table */}
       {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-14 w-full rounded-lg" />
-          ))}
-        </div>
+        <TableSkeleton rows={5} cols={5} />
       ) : error ? (
-        <Alert variant="destructive">{error.message || 'Failed to load user roster'}</Alert>
+        <Alert variant="destructive">{error.message || 'Failed to load user records'}</Alert>
+      ) : users.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No users found"
+          description="No employee accounts match the query."
+        />
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Employee</TableHead>
               <TableHead>Department</TableHead>
-              <TableHead>System Role</TableHead>
-              <TableHead>Account Status</TableHead>
-              <TableHead>Joined</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Created</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-10 text-muted-foreground text-sm">
-                  No users found
-                </TableCell>
-              </TableRow>
-            ) : (
-              users.map((u) => (
+            {users.map((u) => {
+              const isSelf = u._id === currentUser?._id;
+              const roleColors = {
+                SUPER_ADMIN: 'destructive',
+                ADMIN: 'default',
+                PROJECT_MANAGER: 'warning',
+                EMPLOYEE: 'secondary',
+              };
+
+              return (
                 <TableRow key={u._id}>
                   <TableCell>
-                    <div>
-                      <span className="font-semibold text-foreground block">{u.name}</span>
-                      <span className="text-xs text-muted-foreground">{u.email}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center font-bold text-xs text-foreground">
+                        {u.name ? u.name[0].toUpperCase() : 'U'}
+                      </div>
+                      <div>
+                        <span className="font-semibold text-foreground block">
+                          {u.name} {isSelf && <span className="text-primary text-xs">(You)</span>}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{u.email}</span>
+                      </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">{u.department}</TableCell>
+                  <TableCell className="text-muted-foreground">{u.department || 'General'}</TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        u.role === 'SUPER_ADMIN'
-                          ? 'destructive'
-                          : u.role === 'ADMIN'
-                          ? 'warning'
-                          : u.role === 'PROJECT_MANAGER'
-                          ? 'default'
-                          : 'secondary'
-                      }
-                    >
-                      {u.role.replace('_', ' ')}
+                    <Badge variant={roleColors[u.role] || 'secondary'}>
+                      {u.role?.replace('_', ' ')}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={u.isActive ? 'success' : 'destructive'}>
+                    <Badge dot variant={u.isActive ? 'success' : 'secondary'}>
                       {u.isActive ? 'Active' : 'Deactivated'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">{formatDate(u.createdAt)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {formatDate(u.createdAt)}
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {isSuperAdmin && u._id !== currentUser._id && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs"
-                            onClick={() => {
-                              setEditingUser(u);
-                              setNewRole(u.role);
-                            }}
-                          >
-                            Edit Role
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={u.isActive ? 'text-destructive text-xs' : 'text-emerald-500 text-xs'}
-                            isLoading={statusMutation.isPending && statusMutation.variables?.id === u._id}
-                            onClick={() => statusMutation.mutate({ id: u._id, isActive: !u.isActive })}
-                          >
-                            {u.isActive ? 'Deactivate' : 'Activate'}
-                          </Button>
-                        </>
+                      {isSuperAdmin && !isSelf && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingUser(u);
+                            setNewRole(u.role);
+                          }}
+                          className="text-xs"
+                        >
+                          Change Role
+                        </Button>
+                      )}
+
+                      {!isSelf && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => statusMutation.mutate({ id: u._id, isActive: !u.isActive })}
+                          className={`text-xs ${u.isActive ? 'text-destructive' : 'text-emerald-500'}`}
+                        >
+                          {u.isActive ? 'Deactivate' : 'Activate'}
+                        </Button>
                       )}
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
+              );
+            })}
           </TableBody>
         </Table>
       )}
 
-      {/* Edit Role Modal */}
+      {/* Change Role Modal */}
       {editingUser && (
         <Modal
           isOpen={Boolean(editingUser)}
           onClose={() => setEditingUser(null)}
-          title={`Edit Permissions: ${editingUser.name}`}
-          description="Adjust role privileges across the enterprise application"
+          title={`Update Role: ${editingUser.name}`}
+          description="Elevate or downgrade system authorization privileges"
         >
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Select System Role</label>
-              <Select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-                options={[
-                  { value: 'SUPER_ADMIN', label: 'Super Admin (Full Access & User Governance)' },
-                  { value: 'ADMIN', label: 'Admin (Resource, Subscription, Expense Management)' },
-                  { value: 'PROJECT_MANAGER', label: 'Project Manager (Allocation & Projects)' },
-                  { value: 'EMPLOYEE', label: 'Employee (Read-Only & Assigned Resources)' },
-                ]}
-              />
-            </div>
+          <div className="space-y-4 pt-2">
+            <Select
+              label="Select Role"
+              value={newRole}
+              onChange={(e) => setNewRole(e.target.value)}
+              options={[
+                { value: 'SUPER_ADMIN', label: 'Super Admin (Full Tenant Access)' },
+                { value: 'ADMIN', label: 'Admin (Operations & Financial)' },
+                { value: 'PROJECT_MANAGER', label: 'Project Manager (Allocations & Requests)' },
+                { value: 'EMPLOYEE', label: 'Employee (Read-Only Assigned)' },
+              ]}
+            />
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setEditingUser(null)}>
+            <div className="flex justify-end gap-2 pt-4 border-t border-border">
+              <Button variant="secondary" onClick={() => setEditingUser(null)}>
                 Cancel
               </Button>
               <Button
                 isLoading={roleMutation.isPending}
                 onClick={() => roleMutation.mutate({ id: editingUser._id, role: newRole })}
               >
-                Save Role Change
+                Save Role
               </Button>
             </div>
           </div>
@@ -205,4 +221,3 @@ export const UsersPage = () => {
     </div>
   );
 };
-
