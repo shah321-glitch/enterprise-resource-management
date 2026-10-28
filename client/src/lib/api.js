@@ -15,6 +15,12 @@ export const getAccessToken = () => accessToken;
 
 let rawBase = import.meta.env.VITE_API_URL || '/api/v1';
 rawBase = rawBase.trim().replace(/\/+$/, '');
+
+// Auto-sanitize preview deployment URLs with Vercel Authentication to production domain
+if (rawBase.includes('.vercel.app')) {
+  rawBase = rawBase.replace(/-[a-z0-9]+-shah321-glitch\.vercel\.app/, '.vercel.app');
+}
+
 // Ensure the base URL always ends with /api/v1 so endpoints like /auth/login resolve to /api/v1/auth/login
 export const API_BASE_URL = rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`;
 
