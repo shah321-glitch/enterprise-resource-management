@@ -8,13 +8,19 @@ const app = createApp();
 
 const startServer = async () => {
   try {
-    await connectDatabase();
-    initScheduler();
-
     const server = app.listen(env.PORT, () => {
       logger.info(`ERSMS backend running in [${env.NODE_ENV}] mode on port ${env.PORT}`);
       logger.info(`Swagger docs available at http://localhost:${env.PORT}/api/docs`);
     });
+
+    // Connect to database without crashing process if DB is warming up or requires IP whitelist
+    connectDatabase()
+      .then(() => {
+        initScheduler();
+      })
+      .catch((err) => {
+        logger.error({ err }, 'Initial MongoDB connection failed. Server is active and serving /api/v1/health.');
+      });
 
     const shutdown = async (signal) => {
       logger.info(`Received ${signal}. Shutting down gracefully...`);

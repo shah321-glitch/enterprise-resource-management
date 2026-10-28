@@ -20,6 +20,7 @@ export const connectDatabase = async (uri = env.MONGODB_URI) => {
   try {
     const conn = await mongoose.connect(uri, {
       autoIndex: true,
+      serverSelectionTimeoutMS: 5000,
     });
     isConnected = true;
     logger.info(`MongoDB connected successfully to host: ${conn.connection.host}`);
