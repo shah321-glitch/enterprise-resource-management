@@ -13,10 +13,11 @@ import { logger } from './config/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { globalRateLimiter } from './middleware/rateLimiter.js';
 import { mongoSanitize } from './middleware/sanitize.js';
+import { requestId } from './middleware/requestId.js';
 import { NotFoundError } from './utils/errors.js';
 
 // Feature Module Routers
-import healthRoutes from './modules/health/health.routes.js';
+import healthRoutes, { readyHandler } from './modules/health/health.routes.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import userRoutes from './modules/users/user.routes.js';
 import auditLogRoutes from './modules/audit-logs/audit-log.routes.js';
@@ -38,6 +39,9 @@ export const createApp = () => {
   // Trust proxy for secure cookies behind reverse proxy (Nginx / Docker)
   app.set('trust proxy', 1);
 
+  // Request ID tracking middleware
+  app.use(requestId);
+
   // Security HTTP Headers
   app.use(helmet({
     contentSecurityPolicy: env.NODE_ENV === 'production' ? undefined : false,
@@ -56,7 +60,8 @@ export const createApp = () => {
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-Id'],
+      exposedHeaders: ['X-Request-Id'],
     })
   );
 
@@ -71,13 +76,17 @@ export const createApp = () => {
   // Input sanitization against NoSQL injection
   app.use(mongoSanitize);
 
-  // Structured HTTP logging (skip in test environment to keep test output clean)
+  // Structured HTTP logging
   if (env.NODE_ENV !== 'test') {
     app.use(
       pinoHttp({
         logger,
+        genReqId: (req) => req.id || req.headers['x-request-id'],
         autoLogging: {
-          ignore: (req) => req.url.startsWith('/api/v1/health') || req.url.startsWith('/api/docs'),
+          ignore: (req) =>
+            req.url.startsWith('/api/v1/health') ||
+            req.url.startsWith('/api/v1/ready') ||
+            req.url.startsWith('/api/docs'),
         },
       })
     );
@@ -94,8 +103,11 @@ export const createApp = () => {
     logger.warn('Failed to initialize Swagger UI documentation', err);
   }
 
-  // Mount API V1 routes
+  // Health and Readiness probes
   app.use('/api/v1/health', healthRoutes);
+  app.get('/api/v1/ready', readyHandler);
+
+  // Feature Module Routes
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/users', userRoutes);
   app.use('/api/v1/audit-logs', auditLogRoutes);
@@ -118,4 +130,3 @@ export const createApp = () => {
 
   return app;
 };
-

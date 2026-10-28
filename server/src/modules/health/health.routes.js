@@ -3,15 +3,15 @@ import mongoose from 'mongoose';
 
 const router = express.Router();
 
-router.get('/', (req, res) => {
+export const healthHandler = (req, res) => {
   res.status(200).json({
     status: 'healthy',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
-});
+};
 
-router.get('/ready', (req, res) => {
+export const readyHandler = (req, res) => {
   const isDbReady = mongoose.connection.readyState === 1;
   if (!isDbReady) {
     return res.status(503).json({
@@ -26,7 +26,9 @@ router.get('/ready', (req, res) => {
     database: 'connected',
     timestamp: new Date().toISOString(),
   });
-});
+};
+
+router.get('/', healthHandler);
+router.get('/ready', readyHandler);
 
 export default router;
-

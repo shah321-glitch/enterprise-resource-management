@@ -1,6 +1,14 @@
 import mongoose from 'mongoose';
+import dns from 'dns';
 import { env } from './env.js';
 import { logger } from './logger.js';
+
+// Configure public DNS resolvers to prevent Windows SRV ECONNREFUSED with MongoDB Atlas
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {
+  // Ignore in restricted environments
+}
 
 let isConnected = false;
 
@@ -32,4 +40,3 @@ export const disconnectDatabase = async () => {
     logger.error({ err: error }, 'Error disconnecting MongoDB');
   }
 };
-

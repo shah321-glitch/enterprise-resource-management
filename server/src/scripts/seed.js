@@ -1,3 +1,8 @@
+import dns from 'dns';
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {}
+
 import mongoose from 'mongoose';
 import { User } from '../modules/users/user.model.js';
 import { Resource } from '../modules/resources/resource.model.js';

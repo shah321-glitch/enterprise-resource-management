@@ -2,6 +2,7 @@
   "name": "enterprise-resource-management",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Enterprise Resource & Subscription Management System (ERSMS)",
   "workspaces": [
     "server",
@@ -14,10 +15,10 @@
     "build": "npm run build --workspace=server && npm run build --workspace=client",
     "build:server": "npm run build --workspace=server",
     "build:client": "npm run build --workspace=client",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test --workspace=server",
     "test:server": "npm run test --workspace=server",
     "test:client": "npm run test --workspace=client",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "eslint .",
     "seed": "npm run seed --workspace=server"
   },
   "keywords": [
@@ -29,6 +30,8 @@
     "expenses"
   ],
   "author": "ERSMS Team",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "eslint": "^10.13.0"
+  }
 }
-

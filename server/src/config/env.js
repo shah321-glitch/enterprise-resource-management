@@ -1,7 +1,15 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env from cwd first, then fallback to server/.env and root .env
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -11,9 +19,9 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(16).default('development_refresh_secret_key_minimum_16_chars'),
   JWT_ACCESS_EXPIRY: z.string().default('15m'),
   JWT_REFRESH_EXPIRY: z.string().default('7d'),
-  CORS_ORIGIN: z.string().default('http://localhost:5173,http://localhost:3000'),
+  CORS_ORIGIN: z.string().default('http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173'),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000), // 15 mins
-  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(300),
+  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(1000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   CRON_ENABLED: z.string().transform((v) => v === 'true').default('true'),
 });
@@ -26,4 +34,3 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
-
