@@ -94,25 +94,94 @@ export const createApp = () => {
     );
   }
 
-  // Swagger Documentation
+  // Swagger Documentation - Serverless Compatible CDN & JSON endpoints
+  const swaggerDocPath = path.join(__dirname, 'docs', 'swagger.json');
+  let swaggerDocument = null;
   try {
-    const swaggerDocPath = path.join(__dirname, 'docs', 'swagger.json');
     if (fs.existsSync(swaggerDocPath)) {
-      const swaggerDocument = JSON.parse(fs.readFileSync(swaggerDocPath, 'utf8'));
-      app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+      swaggerDocument = JSON.parse(fs.readFileSync(swaggerDocPath, 'utf8'));
     }
   } catch (err) {
-    logger.warn('Failed to initialize Swagger UI documentation', err);
+    logger.warn('Failed to parse Swagger JSON specification', err);
   }
+
+  app.get('/api/docs/swagger.json', (req, res) => {
+    if (swaggerDocument) {
+      return res.status(200).json(swaggerDocument);
+    }
+    res.status(404).json({ success: false, error: 'Swagger specification not found' });
+  });
+
+  app.get('/api/docs', (req, res) => {
+    if (req.accepts('json') && !req.accepts('html')) {
+      return res.status(200).json(swaggerDocument || { status: 'documentation available' });
+    }
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ERSMS API Documentation</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui.css" />
+  <style>body { margin: 0; background: #fafafa; }</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: '/api/docs/swagger.json',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+      });
+    };
+  </script>
+</body>
+</html>`);
+  });
 
   // Health and Readiness probes
   app.use('/api/v1/health', healthRoutes);
   app.get('/api/v1/ready', readyHandler);
 
-  // Root endpoint - redirect browsers to Swagger docs or return JSON
+  // Root endpoint - returns gateway status directly without redirect loops
   app.get('/', (req, res) => {
-    if (req.accepts('html')) {
-      return res.redirect('/api/docs');
+    if (req.accepts('html') && !req.accepts('json')) {
+      return res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ERSMS API Server</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0b132b; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; box-sizing: border-box; }
+    .card { background: #1c2541; border: 1px solid #3a506b; border-radius: 16px; padding: 32px; max-width: 520px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    h1 { margin: 0; font-size: 22px; color: #6fffe9; font-weight: 700; }
+    .badge { background: #10b981; color: #022c22; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 9999px; letter-spacing: 0.05em; text-transform: uppercase; }
+    p { color: #cbd5e1; font-size: 13px; line-height: 1.6; margin: 0 0 20px 0; }
+    .links { display: flex; flex-direction: column; gap: 10px; }
+    .link-item { display: flex; justify-content: space-between; align-items: center; background: #0b132b; border: 1px solid #3a506b; padding: 12px 16px; border-radius: 10px; text-decoration: none; color: #6fffe9; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; transition: all 0.2s; }
+    .link-item:hover { border-color: #6fffe9; background: #1c2541; transform: translateY(-1px); }
+    .tag { font-size: 11px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>ERSMS API Gateway</h1>
+      <span class="badge">Online</span>
+    </div>
+    <p>Enterprise Resource & Subscription Management System REST API backend is operating normally.</p>
+    <div class="links">
+      <a class="link-item" href="/api/v1/health"><span>Liveness Probe</span><span class="tag">/api/v1/health</span></a>
+      <a class="link-item" href="/api/v1/ready"><span>Database Readiness</span><span class="tag">/api/v1/ready</span></a>
+      <a class="link-item" href="/api/docs"><span>OpenAPI Swagger UI</span><span class="tag">/api/docs</span></a>
+    </div>
+  </div>
+</body>
+</html>`);
     }
     res.status(200).json({
       name: 'Enterprise Resource & Subscription Management System (ERSMS) API',

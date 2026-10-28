@@ -1,19 +1,16 @@
 import { createApp } from '../src/app.js';
 import { connectDatabase } from '../src/config/db.js';
 
-let appInstance = null;
+const app = createApp();
 
-export default async function handler(req, res) {
+// Serverless database warm-up middleware
+app.use(async (req, res, next) => {
   try {
     await connectDatabase();
   } catch (err) {
-    console.error('Database connection error in Vercel serverless function:', err.message);
+    console.error('Serverless database connection error:', err.message);
   }
+  next();
+});
 
-  if (!appInstance) {
-    appInstance = createApp();
-  }
-
-  return appInstance(req, res);
-}
-
+export default app;
