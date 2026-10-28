@@ -12,9 +12,13 @@ try {
   // Ignore in restricted environments
 }
 
+// Set safe buffer timeout to prevent hanging indefinitely on buffering
+mongoose.set('bufferTimeoutMS', 6000);
+
 let isConnected = false;
 let memoryServerInstance = null;
 let activeConnectionMode = 'DISCONNECTED';
+let connectionPromise = null;
 
 export const getDbDetails = () => ({
   isConnected: mongoose.connection.readyState === 1,
@@ -30,6 +34,10 @@ export const connectDatabase = async (uri = env.MONGODB_URI) => {
     return mongoose.connection;
   }
 
+  if (connectionPromise) {
+    return connectionPromise;
+  }
+
   if (mongoose.connection.readyState === 2) {
     await new Promise((resolve) => {
       mongoose.connection.once('open', resolve);
@@ -41,62 +49,65 @@ export const connectDatabase = async (uri = env.MONGODB_URI) => {
     }
   }
 
-  // Prevent requests from hanging indefinitely on buffering when disconnected
-  mongoose.set('bufferTimeoutMS', 5000);
+  connectionPromise = (async () => {
+    // 1. Attempt connection to configured URI (e.g. MongoDB Atlas)
+    try {
+      const maskedUri = uri.replace(/\/\/.*@/, '//<credentials>@');
+      logger.info(`Attempting database connection to: ${maskedUri}`);
 
-  // 1. Attempt connection to configured URI (e.g. MongoDB Atlas)
-  try {
-    const maskedUri = uri.replace(/\/\/.*@/, '//<credentials>@');
-    logger.info(`Attempting database connection to: ${maskedUri}`);
+      const isProd = env.NODE_ENV === 'production';
+      const conn = await mongoose.connect(uri, {
+        autoIndex: !isProd,
+        serverSelectionTimeoutMS: 8000,
+        maxPoolSize: isProd ? 10 : 5,
+      });
 
-    const isProd = env.NODE_ENV === 'production';
-    const conn = await mongoose.connect(uri, {
-      autoIndex: !isProd,
-      serverSelectionTimeoutMS: isProd ? 8000 : 4000,
-      maxPoolSize: isProd ? 10 : 5,
-    });
+      isConnected = true;
+      activeConnectionMode = 'CONFIGURED_DATABASE';
+      logger.info(`MongoDB connected successfully to host: ${conn.connection.host}`);
+      return conn.connection;
+    } catch (primaryError) {
+      logger.warn({ err: primaryError.message }, 'Primary MongoDB connection failed.');
 
-    isConnected = true;
-    activeConnectionMode = 'CONFIGURED_DATABASE';
-    logger.info(`MongoDB connected successfully to host: ${conn.connection.host}`);
-    return conn.connection;
-  } catch (primaryError) {
-    logger.warn({ err: primaryError.message }, 'Primary MongoDB connection failed.');
+      // 2. In development, auto-fallback to local in-memory MongoDB instance
+      if (env.NODE_ENV === 'development') {
+        try {
+          logger.info('Initializing local development in-memory MongoDB database...');
+          const { MongoMemoryServer } = await import('mongodb-memory-server');
 
-    // 2. In development, auto-fallback to local in-memory MongoDB instance
-    if (env.NODE_ENV === 'development') {
-      try {
-        logger.info('Initializing local development in-memory MongoDB database...');
-        const { MongoMemoryServer } = await import('mongodb-memory-server');
+          if (!memoryServerInstance) {
+            memoryServerInstance = await MongoMemoryServer.create();
+          }
 
-        if (!memoryServerInstance) {
-          memoryServerInstance = await MongoMemoryServer.create();
+          const localUri = memoryServerInstance.getUri();
+          const localConn = await mongoose.connect(localUri, {
+            autoIndex: true,
+            serverSelectionTimeoutMS: 5000,
+          });
+
+          isConnected = true;
+          activeConnectionMode = 'LOCAL_DEV_FALLBACK';
+          logger.info(`Connected to local development MongoDB at: ${localUri}`);
+
+          // Seed initial enterprise users and entities
+          const { runSeed } = await import('../scripts/seed.js');
+          await runSeed(false);
+          logger.info('Local development MongoDB seeded with initial enterprise fixtures.');
+
+          return localConn.connection;
+        } catch (fallbackError) {
+          logger.error({ err: fallbackError }, 'Failed to initialize local development MongoDB fallback');
+          throw primaryError;
         }
-
-        const localUri = memoryServerInstance.getUri();
-        const localConn = await mongoose.connect(localUri, {
-          autoIndex: true,
-          serverSelectionTimeoutMS: 5000,
-        });
-
-        isConnected = true;
-        activeConnectionMode = 'LOCAL_DEV_FALLBACK';
-        logger.info(`Connected to local development MongoDB at: ${localUri}`);
-
-        // Seed initial enterprise users and entities
-        const { runSeed } = await import('../scripts/seed.js');
-        await runSeed(false);
-        logger.info('Local development MongoDB seeded with initial enterprise fixtures.');
-
-        return localConn.connection;
-      } catch (fallbackError) {
-        logger.error({ err: fallbackError }, 'Failed to initialize local development MongoDB fallback');
-        throw primaryError;
       }
-    }
 
-    throw primaryError;
-  }
+      throw primaryError;
+    } finally {
+      connectionPromise = null;
+    }
+  })();
+
+  return connectionPromise;
 };
 
 export const disconnectDatabase = async () => {

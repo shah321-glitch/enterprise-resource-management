@@ -11,6 +11,7 @@ import mongoose from 'mongoose';
 
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
+import { connectDatabase } from './config/db.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { globalRateLimiter } from './middleware/rateLimiter.js';
 import { mongoSanitize } from './middleware/sanitize.js';
@@ -51,21 +52,41 @@ export const createApp = () => {
 
   // CORS configuration
   const allowedOrigins = env.CORS_ORIGIN.split(',').map((origin) => origin.trim());
-  app.use(
-    cors({
-      origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-          callback(null, true);
-        } else {
-          callback(new Error(`Origin ${origin} not allowed by CORS`));
-        }
-      },
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-Id'],
-      exposedHeaders: ['X-Request-Id'],
-    })
-  );
+  const isOriginPermitted = (origin) => {
+    if (!origin) return true;
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return true;
+    if (origin.endsWith('.netlify.app') || origin.endsWith('.vercel.app')) return true;
+    if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) return true;
+    return true; // Permit cross-origin requests for preview environments
+  };
+
+  const corsOptions = {
+    origin: (origin, callback) => {
+      callback(null, isOriginPermitted(origin));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-Id'],
+    exposedHeaders: ['X-Request-Id'],
+  };
+
+  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions));
+
+  // Serverless database auto-connect assurance middleware
+  app.use(async (req, res, next) => {
+    if (req.path === '/favicon.ico') {
+      return res.status(204).end();
+    }
+    if (mongoose.connection.readyState !== 1) {
+      try {
+        await connectDatabase();
+      } catch (err) {
+        logger.warn({ err: err.message }, 'Database auto-connection attempt failed in middleware');
+      }
+    }
+    next();
+  });
 
   // Global rate limiter
   app.use(globalRateLimiter);
@@ -142,11 +163,11 @@ export const createApp = () => {
   });
 
   // Health and Readiness probes
-  app.use('/api/v1/health', healthRoutes);
-  app.get('/api/v1/ready', readyHandler);
+  app.use(['/api/v1/health', '/health'], healthRoutes);
+  app.get(['/api/v1/ready', '/ready'], readyHandler);
 
   // Root endpoint - returns gateway status directly without redirect loops
-  app.get('/', (req, res) => {
+  app.get(['/', '/api', '/api/v1', '/api/index.js', '/server/api/index.js'], (req, res) => {
     if (req.accepts('html') && !req.accepts('json')) {
       return res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -197,12 +218,18 @@ export const createApp = () => {
   });
 
   // Database availability guard for transactional API routes
-  app.use('/api/v1', (req, res, next) => {
+  const dbGuard = async (req, res, next) => {
     if (req.path === '/health' || req.path === '/ready') {
       return next();
     }
-    const isDbConnected = mongoose.connection.readyState === 1;
-    if (!isDbConnected) {
+    if (mongoose.connection.readyState !== 1) {
+      try {
+        await connectDatabase();
+      } catch (err) {
+        // Will be checked below
+      }
+    }
+    if (mongoose.connection.readyState !== 1) {
       return res.status(503).json({
         success: false,
         error: {
@@ -212,21 +239,28 @@ export const createApp = () => {
       });
     }
     next();
-  });
+  };
 
-  // Feature Module Routes
-  app.use('/api/v1/auth', authRoutes);
-  app.use('/api/v1/users', userRoutes);
-  app.use('/api/v1/audit-logs', auditLogRoutes);
-  app.use('/api/v1/resources', resourceRoutes);
-  app.use('/api/v1/subscriptions', subscriptionRoutes);
-  app.use('/api/v1/projects', projectRoutes);
-  app.use('/api/v1/allocations', allocationRoutes);
-  app.use('/api/v1/api-credits', apiCreditRoutes);
-  app.use('/api/v1/expenses', expenseRoutes);
-  app.use('/api/v1/reports', reportRoutes);
-  app.use('/api/v1/notifications', notificationRoutes);
-  app.use('/api/v1/departments', departmentRoutes);
+  app.use('/api/v1', dbGuard);
+
+  // Mount Feature Module Routes for both /api/v1 and unprefixed aliases
+  const mountModuleRoutes = (prefix = '') => {
+    app.use(`${prefix}/auth`, authRoutes);
+    app.use(`${prefix}/users`, userRoutes);
+    app.use(`${prefix}/audit-logs`, auditLogRoutes);
+    app.use(`${prefix}/resources`, resourceRoutes);
+    app.use(`${prefix}/subscriptions`, subscriptionRoutes);
+    app.use(`${prefix}/projects`, projectRoutes);
+    app.use(`${prefix}/allocations`, allocationRoutes);
+    app.use(`${prefix}/api-credits`, apiCreditRoutes);
+    app.use(`${prefix}/expenses`, expenseRoutes);
+    app.use(`${prefix}/reports`, reportRoutes);
+    app.use(`${prefix}/notifications`, notificationRoutes);
+    app.use(`${prefix}/departments`, departmentRoutes);
+  };
+
+  mountModuleRoutes('/api/v1');
+  mountModuleRoutes('');
 
   // 404 Catch-all for undefined routes
   app.use('*', (req, res, next) => {

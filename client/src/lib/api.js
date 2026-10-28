@@ -13,8 +13,10 @@ export const setAccessToken = (token) => {
 
 export const getAccessToken = () => accessToken;
 
-const rawBase = import.meta.env.VITE_API_URL || '/api/v1';
-export const API_BASE_URL = rawBase.replace(/\/+$/, '');
+let rawBase = import.meta.env.VITE_API_URL || '/api/v1';
+rawBase = rawBase.trim().replace(/\/+$/, '');
+// Ensure the base URL always ends with /api/v1 so endpoints like /auth/login resolve to /api/v1/auth/login
+export const API_BASE_URL = rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`;
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

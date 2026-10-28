@@ -1,16 +1,19 @@
 import { createApp } from '../src/app.js';
 import { connectDatabase } from '../src/config/db.js';
 
-const app = createApp();
+let appInstance = null;
 
-// Serverless database warm-up middleware
-app.use(async (req, res, next) => {
+export default async function handler(req, res) {
+  // Await database connection on every invocation (warm connections resolve immediately)
   try {
     await connectDatabase();
   } catch (err) {
     console.error('Serverless database connection error:', err.message);
   }
-  next();
-});
 
-export default app;
+  if (!appInstance) {
+    appInstance = createApp();
+  }
+
+  return appInstance(req, res);
+}
