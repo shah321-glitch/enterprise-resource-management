@@ -1,12 +1,5 @@
 {
   "version": 2,
-  "redirects": [
-    {
-      "source": "/",
-      "destination": "/api/v1",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     {
       "source": "/(.*)",
