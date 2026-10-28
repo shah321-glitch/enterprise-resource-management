@@ -1,5 +1,5 @@
 import { User } from './user.model.js';
-import { NotFoundError, BadRequestError } from '../../utils/errors.js';
+import { NotFoundError, BadRequestError, ConflictError, ForbiddenError } from '../../utils/errors.js';
 import { createAuditLog } from '../audit-logs/audit-log.service.js';
 
 export const listUsers = async ({ page = 1, limit = 20, search = '', role = '', department = '', isActive = null }) => {
@@ -41,15 +41,65 @@ export const getUserById = async (id) => {
   return user;
 };
 
+export const createUser = async ({ name, email, password, role, department, isActive = true }, actorUser, req = null) => {
+  const existing = await User.findOne({ email });
+  if (existing) {
+    throw new ConflictError('A user with this email address already exists');
+  }
+
+  // Only SUPER_ADMIN can create another SUPER_ADMIN
+  if (role === 'SUPER_ADMIN' && actorUser?.role !== 'SUPER_ADMIN') {
+    throw new ForbiddenError('Only Super Administrators can create accounts with the Super Admin role');
+  }
+
+  const passwordHash = await User.hashPassword(password);
+  const user = new User({
+    name,
+    email,
+    passwordHash,
+    role: role || 'EMPLOYEE',
+    department: department || 'General',
+    isActive: Boolean(isActive),
+  });
+
+  await user.save();
+
+  await createAuditLog({
+    actor: actorUser,
+    action: 'USER_CREATED',
+    targetType: 'User',
+    targetId: user._id,
+    targetName: user.name,
+    details: { email: user.email, role: user.role, department: user.department },
+    req,
+  });
+
+  return user;
+};
+
 export const updateUser = async (id, updateData, actorUser, req = null) => {
   const user = await User.findById(id);
   if (!user) {
     throw new NotFoundError('User not found');
   }
 
+  // Role elevation / modification security check
+  if (updateData.role !== undefined && updateData.role !== user.role) {
+    if (actorUser.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenError('Only Super Administrators can modify user roles. Users cannot elevate their own roles.');
+    }
+
+    // Prevent last active super admin from demoting themselves
+    if (actorUser._id.toString() === id.toString() && updateData.role !== 'SUPER_ADMIN') {
+      const activeSuperAdmins = await User.countDocuments({ role: 'SUPER_ADMIN', isActive: true });
+      if (activeSuperAdmins <= 1) {
+        throw new BadRequestError('Cannot demote the sole active Super Administrator');
+      }
+    }
+  }
+
   const allowedUpdates = ['name', 'department'];
-  // Only Super Admin can change roles
-  if (updateData.role && actorUser.role === 'SUPER_ADMIN') {
+  if (actorUser.role === 'SUPER_ADMIN') {
     allowedUpdates.push('role');
   }
 
@@ -90,7 +140,7 @@ export const setUserStatus = async (id, isActive, actorUser, req = null) => {
   user.isActive = Boolean(isActive);
   if (!isActive) {
     // Clear all refresh tokens to terminate active sessions immediately
-    user.refreshTokens = [];
+    user.revokeAllSessions();
   }
   await user.save();
 
@@ -107,3 +157,26 @@ export const setUserStatus = async (id, isActive, actorUser, req = null) => {
   return user;
 };
 
+export const revokeUserSessions = async (id, actorUser, req = null) => {
+  const user = await User.findById(id);
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  user.revokeAllSessions();
+  await user.save();
+
+  await createAuditLog({
+    actor: actorUser,
+    action: 'USER_SESSIONS_REVOKED_BY_ADMIN',
+    targetType: 'User',
+    targetId: user._id,
+    targetName: user.name,
+    details: { targetEmail: user.email },
+    req,
+  });
+
+  return {
+    message: `All active sessions for ${user.email} have been revoked`,
+  };
+};

@@ -23,10 +23,31 @@ export const listUsers = async (req, res, next) => {
 
 export const getUserById = async (req, res, next) => {
   try {
+    // Non-admins can only view their own profile
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(req.user.role) && req.user._id.toString() !== req.params.id) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'You can only view your own user profile' },
+      });
+    }
+
     const user = await userService.getUserById(req.params.id);
     res.status(200).json({
       success: true,
       data: user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createUser = async (req, res, next) => {
+  try {
+    const user = await userService.createUser(req.body, req.user, req);
+    res.status(201).json({
+      success: true,
+      data: user,
+      message: 'Enterprise user account created successfully',
     });
   } catch (error) {
     next(error);
@@ -60,3 +81,14 @@ export const setUserStatus = async (req, res, next) => {
   }
 };
 
+export const revokeUserSessions = async (req, res, next) => {
+  try {
+    const result = await userService.revokeUserSessions(req.params.id, req.user, req);
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -44,9 +44,22 @@ erDiagram
 - `email`: String (Required, unique, lowercase, indexed)
 - `passwordHash`: String (Required, Argon2id/Bcrypt hash)
 - `role`: Enum `['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER', 'EMPLOYEE']` (Default: `EMPLOYEE`, indexed)
-- `department`: String (e.g., "Engineering", "Design", "DevOps")
+- `department`: String (e.g., "Core Infrastructure", "IT Operations")
 - `isActive`: Boolean (Default: `true`, indexed)
 - `refreshTokens`: Array of `{ tokenHash: String, expiresAt: Date, createdAt: Date, ipAddress: String, userAgent: String }`
+- `passwordResetTokenHash`: String (SHA-256 hash, select: false)
+- `passwordResetExpiresAt`: Date (1 hour expiry, select: false)
+- `createdAt`, `updatedAt`: Timestamps
+
+### 3.1b Departments (`departments`)
+- `_id`: ObjectId
+- `name`: String (Required, unique, trimmed, indexed)
+- `code`: String (Required, unique, uppercase, e.g. "ENG", "OPS", "EXEC", "PROD", indexed)
+- `description`: String
+- `managerId`: ObjectId (Ref `User`, indexed)
+- `budgetInCents`: Number (Integer minor units, >= 0, default 0)
+- `currency`: String (ISO 4217, uppercase, default "USD")
+- `isActive`: Boolean (Default: `true`, indexed)
 - `createdAt`, `updatedAt`: Timestamps
 
 ### 3.2 Resources (`resources`)
@@ -84,6 +97,20 @@ erDiagram
 - `renewalReminders`: Array of `{ daysBefore: Number, sentAt: Date, notificationId: ObjectId }`
 - `billingHistory`: Array of `{ billingDate: Date, amountInCents: Number, currency: String, invoiceRef: String, status: String }`
 - `cancellationDetails`: `{ cancelledAt: Date, cancelledBy: ObjectId, reason: String }`
+- `createdAt`, `updatedAt`: Timestamps
+
+### 3.3b Billing & Renewal History Records (`billing_records`)
+- `_id`: ObjectId
+- `subscriptionId`: ObjectId (Ref `Subscription`, required, indexed)
+- `resourceId`: ObjectId (Ref `Resource`, indexed)
+- `billingDate`: Date (Required, indexed)
+- `amountInCents`: Number (Integer minor units, >= 0, required)
+- `currency`: String (ISO 4217, default: "USD")
+- `invoiceRef`: String (Indexed)
+- `status`: Enum `['PAID', 'PENDING', 'FAILED', 'REFUNDED']` (Default: `PAID`, indexed)
+- `renewalType`: Enum `['AUTOMATIC', 'MANUAL', 'ONE_TIME']` (Default: `AUTOMATIC`)
+- `processedBy`: ObjectId (Ref `User`)
+- `notes`: String
 - `createdAt`, `updatedAt`: Timestamps
 
 ### 3.4 Projects (`projects`)
@@ -131,6 +158,20 @@ erDiagram
 - `syncStatus`: Enum `['SUCCESS', 'FAILED', 'NEVER_SYNCED', 'SYNCING']` (Default: `NEVER_SYNCED`)
 - `lastSyncError`: String
 - `resetDate`: Date (For monthly resetting quotas)
+- `createdAt`, `updatedAt`: Timestamps
+
+### 3.6b API Usage Records (`api_usage_records`)
+- `_id`: ObjectId
+- `accountId`: ObjectId (Ref `ApiCreditAccount`, required, indexed)
+- `provider`: String (Required, indexed)
+- `date`: Date (Default: `Date.now`, indexed)
+- `amount`: Number (Required, units consumed, non-negative)
+- `unit`: String (Required, e.g. "TOKENS", "REQUESTS", "USD_CENTS")
+- `costInCents`: Number (Integer minor units, >= 0, default 0)
+- `endpoint`: String (e.g. "/v1/chat/completions")
+- `projectId`: ObjectId (Ref `Project`, optional, indexed)
+- `recordedBy`: ObjectId (Ref `User`)
+- `description`: String
 - `createdAt`, `updatedAt`: Timestamps
 
 ### 3.7 Expenses (`expenses`)

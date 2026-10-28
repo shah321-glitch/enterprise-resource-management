@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { ROLES } from '../../middleware/rbac.js';
 
 const refreshTokenSchema = new mongoose.Schema({
@@ -56,17 +57,30 @@ const userSchema = new mongoose.Schema({
     index: true,
   },
   refreshTokens: [refreshTokenSchema],
+  passwordResetTokenHash: {
+    type: String,
+    select: false,
+  },
+  passwordResetExpiresAt: {
+    type: Date,
+    select: false,
+  },
 }, {
   timestamps: true,
   toJSON: {
     transform: (doc, ret) => {
       delete ret.passwordHash;
       delete ret.refreshTokens;
+      delete ret.passwordResetTokenHash;
+      delete ret.passwordResetExpiresAt;
       delete ret.__v;
       return ret;
     },
   },
 });
+
+userSchema.index({ isActive: 1, role: 1 });
+userSchema.index({ department: 1, isActive: 1 });
 
 // Password verification method
 userSchema.methods.comparePassword = async function (candidatePassword) {
@@ -80,5 +94,27 @@ userSchema.statics.hashPassword = async function (password) {
   return bcrypt.hash(password, salt);
 };
 
-export const User = mongoose.model('User', userSchema);
+// Generates a cryptographically secure random reset token and stores sha256 hash
+userSchema.methods.createPasswordResetToken = function () {
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  this.passwordResetTokenHash = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+  // Token expires in 1 hour
+  this.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+  return resetToken;
+};
 
+// Clears the password reset token fields
+userSchema.methods.clearPasswordResetToken = function () {
+  this.passwordResetTokenHash = undefined;
+  this.passwordResetExpiresAt = undefined;
+};
+
+// Revoke all active refresh sessions
+userSchema.methods.revokeAllSessions = function () {
+  this.refreshTokens = [];
+};
+
+export const User = mongoose.model('User', userSchema);

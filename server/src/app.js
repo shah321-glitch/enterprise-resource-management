@@ -30,6 +30,7 @@ import apiCreditRoutes from './modules/api-credits/api-credit.routes.js';
 import expenseRoutes from './modules/expenses/expense.routes.js';
 import reportRoutes from './modules/reports/report.routes.js';
 import notificationRoutes from './modules/notifications/notification.routes.js';
+import departmentRoutes from './modules/departments/department.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -156,6 +157,7 @@ export const createApp = () => {
   app.use('/api/v1/expenses', expenseRoutes);
   app.use('/api/v1/reports', reportRoutes);
   app.use('/api/v1/notifications', notificationRoutes);
+  app.use('/api/v1/departments', departmentRoutes);
 
   // 404 Catch-all for undefined routes
   app.use('*', (req, res, next) => {

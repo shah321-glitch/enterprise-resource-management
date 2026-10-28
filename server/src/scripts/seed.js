@@ -5,11 +5,14 @@ try {
 
 import mongoose from 'mongoose';
 import { User } from '../modules/users/user.model.js';
+import { Department } from '../modules/departments/department.model.js';
 import { Resource } from '../modules/resources/resource.model.js';
 import { Subscription } from '../modules/subscriptions/subscription.model.js';
+import { BillingRecord } from '../modules/subscriptions/billing-record.model.js';
 import { Project } from '../modules/projects/project.model.js';
 import { ResourceAllocation } from '../modules/allocations/allocation.model.js';
 import { ApiCreditAccount } from '../modules/api-credits/api-credit.model.js';
+import { ApiUsageRecord } from '../modules/api-credits/api-usage-record.model.js';
 import { Expense } from '../modules/expenses/expense.model.js';
 import { Notification } from '../modules/notifications/notification.model.js';
 import { AuditLog } from '../modules/audit-logs/audit-log.model.js';
@@ -27,11 +30,14 @@ export const runSeed = async (standalone = true) => {
     // Clean existing seed collections
     await Promise.all([
       User.deleteMany({}),
+      Department.deleteMany({}),
       Resource.deleteMany({}),
       Subscription.deleteMany({}),
+      BillingRecord.deleteMany({}),
       Project.deleteMany({}),
       ResourceAllocation.deleteMany({}),
       ApiCreditAccount.deleteMany({}),
+      ApiUsageRecord.deleteMany({}),
       Expense.deleteMany({}),
       Notification.deleteMany({}),
       AuditLog.deleteMany({}),
@@ -81,6 +87,47 @@ export const runSeed = async (standalone = true) => {
     ]);
 
     logger.info('Seeded core enterprise users.');
+
+    // Seed Departments
+    const [deptEngineering, deptOps, deptExec, deptProduct] = await Department.create([
+      {
+        name: 'Core Infrastructure',
+        code: 'ENG',
+        description: 'Core cloud platform, DevOps, and backend infrastructure.',
+        managerId: superAdmin._id,
+        budgetInCents: 25000000, // $250,000.00
+        currency: 'USD',
+        isActive: true,
+      },
+      {
+        name: 'IT Operations',
+        code: 'OPS',
+        description: 'Corporate IT, hardware, internal tools, and license procurement.',
+        managerId: admin._id,
+        budgetInCents: 10000000, // $100,000.00
+        currency: 'USD',
+        isActive: true,
+      },
+      {
+        name: 'Executive Operations',
+        code: 'EXEC',
+        description: 'Executive management, finance, and legal compliance.',
+        managerId: superAdmin._id,
+        budgetInCents: 5000000, // $50,000.00
+        currency: 'USD',
+        isActive: true,
+      },
+      {
+        name: 'Product & Engineering',
+        code: 'PROD',
+        description: 'AI R&D, client portals, design, and user experience.',
+        managerId: pm._id,
+        budgetInCents: 15000000, // $150,000.00
+        currency: 'USD',
+        isActive: true,
+      },
+    ]);
+    logger.info('Seeded enterprise departments.');
 
     // 2. Seed Projects
     const [projectAI, projectPortal, projectCloud, projectMobile] = await Project.create([
@@ -295,6 +342,78 @@ export const runSeed = async (standalone = true) => {
 
     logger.info('Seeded subscriptions.');
 
+    // Seed Standalone Billing & Renewal Records
+    await BillingRecord.create([
+      {
+        subscriptionId: subAws._id,
+        resourceId: resAws._id,
+        billingDate: new Date('2026-08-01'),
+        amountInCents: 385000,
+        currency: 'USD',
+        invoiceRef: 'INV-AWS-8831',
+        status: 'PAID',
+        renewalType: 'AUTOMATIC',
+        processedBy: admin._id,
+        notes: 'Monthly compute capacity renewal',
+      },
+      {
+        subscriptionId: subAws._id,
+        resourceId: resAws._id,
+        billingDate: new Date('2026-09-01'),
+        amountInCents: 385000,
+        currency: 'USD',
+        invoiceRef: 'INV-AWS-9124',
+        status: 'PAID',
+        renewalType: 'AUTOMATIC',
+        processedBy: admin._id,
+      },
+      {
+        subscriptionId: subAws._id,
+        resourceId: resAws._id,
+        billingDate: new Date('2026-10-01'),
+        amountInCents: 385000,
+        currency: 'USD',
+        invoiceRef: 'INV-AWS-9482',
+        status: 'PAID',
+        renewalType: 'AUTOMATIC',
+        processedBy: admin._id,
+      },
+      {
+        subscriptionId: subOpenAi._id,
+        resourceId: resOpenAi._id,
+        billingDate: new Date('2026-09-15'),
+        amountInCents: 150000,
+        currency: 'USD',
+        invoiceRef: 'INV-OAI-4402',
+        status: 'PAID',
+        renewalType: 'AUTOMATIC',
+        processedBy: pm._id,
+      },
+      {
+        subscriptionId: subOpenAi._id,
+        resourceId: resOpenAi._id,
+        billingDate: new Date('2026-10-15'),
+        amountInCents: 150000,
+        currency: 'USD',
+        invoiceRef: 'INV-OAI-4819',
+        status: 'PAID',
+        renewalType: 'AUTOMATIC',
+        processedBy: pm._id,
+      },
+      {
+        subscriptionId: subFigma._id,
+        resourceId: resFigma._id,
+        billingDate: new Date('2026-10-05'),
+        amountInCents: 45000,
+        currency: 'USD',
+        invoiceRef: 'INV-FIGMA-1029',
+        status: 'PAID',
+        renewalType: 'AUTOMATIC',
+        processedBy: pm._id,
+      },
+    ]);
+    logger.info('Seeded standalone billing and renewal history records.');
+
     // 5. Seed Resource Allocations
     await ResourceAllocation.create([
       {
@@ -342,7 +461,7 @@ export const runSeed = async (standalone = true) => {
     logger.info('Seeded project resource allocations.');
 
     // 6. Seed API Credit Accounts
-    await ApiCreditAccount.create([
+    const [apiOpenAi, apiAnthropic, apiStripe] = await ApiCreditAccount.create([
       {
         provider: 'OpenAI',
         accountIdentifier: 'org-enterprise-corp-01',
@@ -387,6 +506,47 @@ export const runSeed = async (standalone = true) => {
     ]);
 
     logger.info('Seeded API credit accounts.');
+
+    // Seed Standalone API Usage Records
+    await ApiUsageRecord.create([
+      {
+        accountId: apiOpenAi._id,
+        provider: 'OpenAI',
+        date: new Date(Date.now() - 3600000 * 24),
+        amount: 850000,
+        unit: 'TOKENS',
+        costInCents: 4250,
+        endpoint: '/v1/chat/completions',
+        projectId: projectAI._id,
+        recordedBy: employee._id,
+        description: 'Knowledge graph document embedding indexing batch',
+      },
+      {
+        accountId: apiOpenAi._id,
+        provider: 'OpenAI',
+        date: new Date(Date.now() - 3600000 * 4),
+        amount: 320000,
+        unit: 'TOKENS',
+        costInCents: 1600,
+        endpoint: '/v1/chat/completions',
+        projectId: projectAI._id,
+        recordedBy: employee._id,
+        description: 'Evaluation test queries for multi-agent reasoning',
+      },
+      {
+        accountId: apiAnthropic._id,
+        provider: 'Anthropic',
+        date: new Date(Date.now() - 3600000 * 8),
+        amount: 15000,
+        unit: 'USD_CENTS',
+        costInCents: 15000,
+        endpoint: '/v1/messages',
+        projectId: projectAI._id,
+        recordedBy: pm._id,
+        description: 'Claude 3.7 Sonnet analysis runs',
+      },
+    ]);
+    logger.info('Seeded API usage records.');
 
     // 7. Seed Verified Paid Expenses
     const d1 = new Date(now.getFullYear(), now.getMonth() - 2, 12);

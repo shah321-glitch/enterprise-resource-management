@@ -3,8 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Layers, Lock, Mail, User, Building } from 'lucide-react';
+import { Layers, Lock, Mail, User, Building, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useToast } from '../../context/ToastContext.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Input } from '../../components/ui/Input.jsx';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card.jsx';
@@ -18,12 +19,14 @@ const registerSchema = z.object({
     .string()
     .min(8, 'Minimum 8 characters')
     .regex(/[A-Z]/, 'Must contain uppercase letter')
+    .regex(/[a-z]/, 'Must contain lowercase letter')
     .regex(/[0-9]/, 'Must contain number')
     .regex(/[^A-Za-z0-9]/, 'Must contain special symbol'),
 });
 
 export const RegisterPage = () => {
   const { register: registerAuth } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
   const [authError, setAuthError] = useState(null);
 
@@ -45,6 +48,7 @@ export const RegisterPage = () => {
     setAuthError(null);
     try {
       await registerAuth(data);
+      toast?.success('Enterprise registration successful. Please log in.');
       navigate('/login', { state: { registered: true } });
     } catch (err) {
       setAuthError(err.message || 'Registration failed');
@@ -67,7 +71,9 @@ export const RegisterPage = () => {
         <Card className="border-border shadow-xl backdrop-blur-sm">
           <CardHeader className="space-y-1">
             <CardTitle className="text-xl">Create your account</CardTitle>
-            <CardDescription>Enter your employee details below</CardDescription>
+            <CardDescription>
+              Enterprise single-company platform. Public registration is locked once initial setup is complete.
+            </CardDescription>
           </CardHeader>
 
           <form onSubmit={handleSubmit(onSubmit)}>
@@ -145,3 +151,4 @@ export const RegisterPage = () => {
   );
 };
 
+export default RegisterPage;

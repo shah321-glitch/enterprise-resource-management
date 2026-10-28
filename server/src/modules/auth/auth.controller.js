@@ -11,7 +11,7 @@ const COOKIE_OPTIONS = {
 
 export const register = async (req, res, next) => {
   try {
-    const user = await authService.register(req.body, req);
+    const user = await authService.register(req.body, req.user || null, req);
     res.status(201).json({
       success: true,
       data: {
@@ -101,6 +101,7 @@ export const getMe = async (req, res, next) => {
       success: true,
       data: {
         user: req.user,
+        activeSessionCount: req.user?.refreshTokens?.length || 1,
       },
     });
   } catch (error) {
@@ -108,3 +109,66 @@ export const getMe = async (req, res, next) => {
   }
 };
 
+export const forgotPassword = async (req, res, next) => {
+  try {
+    const result = await authService.requestPasswordReset(req.body.email, req);
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetPassword = async (req, res, next) => {
+  try {
+    const result = await authService.resetPassword(req.body, req);
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const changePassword = async (req, res, next) => {
+  try {
+    const result = await authService.changePassword(req.user._id, req.body, req);
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateProfile = async (req, res, next) => {
+  try {
+    const user = await authService.updateProfile(req.user._id, req.body, req);
+    res.status(200).json({
+      success: true,
+      data: {
+        user,
+      },
+      message: 'Profile updated successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const revokeSessions = async (req, res, next) => {
+  try {
+    const currentRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+    const result = await authService.revokeUserSessions(req.user._id, currentRefreshToken, req);
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

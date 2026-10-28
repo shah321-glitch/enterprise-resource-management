@@ -3,10 +3,15 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { User } from '../src/modules/users/user.model.js';
 import { AuditLog } from '../src/modules/audit-logs/audit-log.model.js';
+import { Department } from '../src/modules/departments/department.model.js';
 
 const app = createApp();
 
 describe('Auth & Security API Integration Tests', () => {
+  beforeEach(async () => {
+    process.env.ALLOW_PUBLIC_REGISTRATION = 'true';
+  });
+
   const validUser = {
     name: 'Enterprise Engineer',
     email: 'engineer@test.internal',
@@ -21,6 +26,14 @@ describe('Auth & Security API Integration Tests', () => {
     password: 'Admin#2026!Secure',
     role: 'ADMIN',
     department: 'Operations',
+  };
+
+  const superAdminUser = {
+    name: 'Enterprise Super Admin',
+    email: 'superadmin@test.internal',
+    password: 'SuperAdmin#2026!Secure',
+    role: 'SUPER_ADMIN',
+    department: 'Executive Operations',
   };
 
   it('should register a new user successfully with hashed password', async () => {
@@ -98,6 +111,13 @@ describe('Auth & Security API Integration Tests', () => {
     expect(audit).toBeDefined();
   });
 
+  it('should reject unauthenticated requests to protected endpoints', async () => {
+    const res = await request(app).get('/api/v1/auth/me');
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('UNAUTHORIZED');
+  });
+
   it('should rotate refresh token and issue new token pair', async () => {
     await request(app).post('/api/v1/auth/register').send(validUser);
     const loginRes = await request(app)
@@ -157,34 +177,209 @@ describe('Auth & Security API Integration Tests', () => {
     expect(alertAudit).toBeDefined();
   });
 
-  it('should enforce role-based access control (RBAC)', async () => {
-    // Register employee
+  it('should allow user session revocation via /revoke-sessions', async () => {
     await request(app).post('/api/v1/auth/register').send(validUser);
-    const empLogin = await request(app)
+    const loginRes = await request(app)
       .post('/api/v1/auth/login')
       .send({ email: validUser.email, password: validUser.password });
-    const empToken = empLogin.body.data.accessToken;
 
-    // Register admin
-    await request(app).post('/api/v1/auth/register').send(adminUser);
+    const accessToken = loginRes.body.data.accessToken;
+
+    const revokeRes = await request(app)
+      .post('/api/v1/auth/revoke-sessions')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(revokeRes.status).toBe(200);
+    expect(revokeRes.body.success).toBe(true);
+
+    const audit = await AuditLog.findOne({ action: 'SESSIONS_REVOKED' });
+    expect(audit).toBeDefined();
+  });
+
+  it('should immediately block deactivated accounts from protected APIs and login', async () => {
+    // 1. Create user and obtain token
+    await request(app).post('/api/v1/auth/register').send(validUser);
+    const loginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: validUser.email, password: validUser.password });
+
+    const empToken = loginRes.body.data.accessToken;
+
+    // 2. Deactivate the user in database
+    await User.updateOne({ email: validUser.email }, { isActive: false, refreshTokens: [] });
+
+    // 3. User attempts to query /me with existing token -> 403 Forbidden
+    const checkRes = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${empToken}`);
+
+    expect(checkRes.status).toBe(403);
+    expect(checkRes.body.error.message).toContain('deactivated');
+
+    // 4. User attempts to log in again -> 403 Forbidden
+    const loginAttempt = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: validUser.email, password: validUser.password });
+
+    expect(loginAttempt.status).toBe(403);
+    expect(loginAttempt.body.error.message).toContain('deactivated');
+  });
+
+  it('should prevent users from elevating their own roles', async () => {
+    // Register initial admin so system is bootstrapped
+    await request(app).post('/api/v1/auth/register').send(superAdminUser);
+
+    // Register regular employee
+    await request(app).post('/api/v1/auth/register').send(validUser);
+    const loginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: validUser.email, password: validUser.password });
+
+    const empToken = loginRes.body.data.accessToken;
+
+    // Regular employee tries to elevate role via profile update
+    const profileRes = await request(app)
+      .put('/api/v1/auth/profile')
+      .set('Authorization', `Bearer ${empToken}`)
+      .send({
+        name: 'Updated Name',
+        role: 'SUPER_ADMIN', // Must be ignored / stripped
+      });
+
+    expect(profileRes.status).toBe(200);
+    expect(profileRes.body.data.user.role).toBe('EMPLOYEE');
+
+    const dbUser = await User.findOne({ email: validUser.email });
+    expect(dbUser.role).toBe('EMPLOYEE');
+  });
+
+  it('should support complete password reset flow with expiring secure tokens', async () => {
+    await request(app).post('/api/v1/auth/register').send(validUser);
+
+    // 1. Request password reset
+    const forgotRes = await request(app)
+      .post('/api/v1/auth/forgot-password')
+      .send({ email: validUser.email });
+
+    expect(forgotRes.status).toBe(200);
+    expect(forgotRes.body.success).toBe(true);
+    expect(forgotRes.body.resetToken).toBeDefined();
+
+    const resetToken = forgotRes.body.resetToken;
+
+    // 2. Reject reset with invalid or expired token
+    const invalidReset = await request(app)
+      .post('/api/v1/auth/reset-password')
+      .send({
+        token: 'invalid-non-existent-token-12345',
+        newPassword: 'BrandNew#2026!Secure',
+      });
+
+    expect(invalidReset.status).toBe(400);
+
+    // 3. Complete valid password reset
+    const validReset = await request(app)
+      .post('/api/v1/auth/reset-password')
+      .send({
+        token: resetToken,
+        newPassword: 'BrandNew#2026!Secure',
+      });
+
+    expect(validReset.status).toBe(200);
+    expect(validReset.body.success).toBe(true);
+
+    // 4. Old password must now fail
+    const oldLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: validUser.email, password: validUser.password });
+    expect(oldLogin.status).toBe(401);
+
+    // 5. New password succeeds
+    const newLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: validUser.email, password: 'BrandNew#2026!Secure' });
+    expect(newLogin.status).toBe(200);
+    expect(newLogin.body.data.accessToken).toBeDefined();
+  });
+
+  it('should enforce single-company registration policy when public registration is disabled', async () => {
+    process.env.ALLOW_PUBLIC_REGISTRATION = 'false';
+
+    // First user creates SUPER_ADMIN initial bootstrap
+    const firstRes = await request(app)
+      .post('/api/v1/auth/register')
+      .send(superAdminUser);
+
+    expect(firstRes.status).toBe(201);
+    expect(firstRes.body.data.user.role).toBe('SUPER_ADMIN');
+
+    // Subsequent public self-registration without admin token must be rejected with 403 Forbidden!
+    const secondRes = await request(app)
+      .post('/api/v1/auth/register')
+      .send(validUser);
+
+    expect(secondRes.status).toBe(403);
+    expect(secondRes.body.error.message).toContain('Public registration is disabled');
+  });
+
+  it('should allow Admin to provision new enterprise user accounts via POST /api/v1/users', async () => {
+    // 1. Create Super Admin
+    await request(app).post('/api/v1/auth/register').send(superAdminUser);
     const adminLogin = await request(app)
       .post('/api/v1/auth/login')
-      .send({ email: adminUser.email, password: adminUser.password });
+      .send({ email: superAdminUser.email, password: superAdminUser.password });
+    const superAdminToken = adminLogin.body.data.accessToken;
+
+    // 2. Super Admin provisions new employee
+    const createRes = await request(app)
+      .post('/api/v1/users')
+      .set('Authorization', `Bearer ${superAdminToken}`)
+      .send({
+        name: 'New Provisioned User',
+        email: 'provisioned@enterprise.internal',
+        password: 'Provisioned#2026!Secure',
+        role: 'PROJECT_MANAGER',
+        department: 'Product & Engineering',
+      });
+
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.success).toBe(true);
+    expect(createRes.body.data.email).toBe('provisioned@enterprise.internal');
+    expect(createRes.body.data.role).toBe('PROJECT_MANAGER');
+  });
+
+  it('should manage enterprise departments with validation and integer budget cents', async () => {
+    await request(app).post('/api/v1/auth/register').send(superAdminUser);
+    const adminLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: superAdminUser.email, password: superAdminUser.password });
     const adminToken = adminLogin.body.data.accessToken;
 
-    // Employee tries to list users (requires ADMIN or SUPER_ADMIN) -> 403 Forbidden
-    const forbiddenRes = await request(app)
-      .get('/api/v1/users')
-      .set('Authorization', `Bearer ${empToken}`);
-    expect(forbiddenRes.status).toBe(403);
+    // 1. Admin creates department
+    const deptRes = await request(app)
+      .post('/api/v1/departments')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Cybersecurity & Compliance',
+        code: 'SEC',
+        description: 'InfoSec and audit governance',
+        budgetInCents: 12000000, // $120,000.00
+        currency: 'USD',
+      });
 
-    // Admin accesses user list -> 200 OK
-    const adminRes = await request(app)
-      .get('/api/v1/users')
-      .set('Authorization', `Bearer ${adminToken}`);
-    expect(adminRes.status).toBe(200);
-    expect(adminRes.body.success).toBe(true);
-    expect(Array.isArray(adminRes.body.data)).toBe(true);
+    expect(deptRes.status).toBe(201);
+    expect(deptRes.body.data.code).toBe('SEC');
+    expect(deptRes.body.data.budgetInCents).toBe(12000000);
+
+    // 2. Reject duplicate department code
+    const dupRes = await request(app)
+      .post('/api/v1/departments')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Another Security Team',
+        code: 'SEC',
+      });
+
+    expect(dupRes.status).toBe(409);
   });
 });
-

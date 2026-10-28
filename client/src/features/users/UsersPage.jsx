@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Search, ShieldCheck, UserX, UserCheck, Shield } from 'lucide-react';
+import { Users, Search, UserPlus, Shield, UserX, UserCheck, KeyRound, LogOut } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { formatDate } from '../../lib/utils.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -26,11 +26,38 @@ export const UsersPage = () => {
   const [editingUser, setEditingUser] = useState(null);
   const [newRole, setNewRole] = useState('EMPLOYEE');
 
+  // Provision User Modal State
+  const [isProvisionOpen, setIsProvisionOpen] = useState(false);
+  const [provisionName, setProvisionName] = useState('');
+  const [provisionEmail, setProvisionEmail] = useState('');
+  const [provisionPassword, setProvisionPassword] = useState('');
+  const [provisionRole, setProvisionRole] = useState('EMPLOYEE');
+  const [provisionDept, setProvisionDept] = useState('Engineering');
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['users', search],
     queryFn: async () => {
       const res = await api.get('/users', { params: { search: search || undefined } });
       return res.data.data;
+    },
+  });
+
+  const provisionMutation = useMutation({
+    mutationFn: async (userData) => {
+      const res = await api.post('/users', userData);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setIsProvisionOpen(false);
+      setProvisionName('');
+      setProvisionEmail('');
+      setProvisionPassword('');
+      setProvisionRole('EMPLOYEE');
+      toast.success('Enterprise employee account provisioned successfully');
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error?.message || err.message || 'Failed to provision user');
     },
   });
 
@@ -43,7 +70,7 @@ export const UsersPage = () => {
       toast.success(`User account ${vars.isActive ? 'activated' : 'deactivated'}`);
     },
     onError: (err) => {
-      toast.error(err.message || 'Failed to update account status');
+      toast.error(err.response?.data?.error?.message || err.message || 'Failed to update account status');
     },
   });
 
@@ -57,9 +84,33 @@ export const UsersPage = () => {
       toast.success('User role updated successfully');
     },
     onError: (err) => {
-      toast.error(err.message || 'Failed to update role');
+      toast.error(err.response?.data?.error?.message || err.message || 'Failed to update role');
     },
   });
+
+  const revokeMutation = useMutation({
+    mutationFn: async (id) => {
+      const res = await api.post(`/users/${id}/revoke-sessions`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Sessions revoked successfully');
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error?.message || err.message || 'Failed to revoke sessions');
+    },
+  });
+
+  const handleProvisionSubmit = (e) => {
+    e.preventDefault();
+    provisionMutation.mutate({
+      name: provisionName,
+      email: provisionEmail,
+      password: provisionPassword,
+      role: provisionRole,
+      department: provisionDept,
+    });
+  };
 
   const users = data || [];
 
@@ -73,6 +124,14 @@ export const UsersPage = () => {
           <Badge variant="outline" className="font-mono text-xs">
             {users.length} members
           </Badge>
+        }
+        actions={
+          <Button
+            onClick={() => setIsProvisionOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <UserPlus className="h-4 w-4" /> Provision Employee
+          </Button>
         }
       />
 
@@ -96,6 +155,9 @@ export const UsersPage = () => {
           icon={Users}
           title="No users found"
           description="No employee accounts match the query."
+          action={
+            <Button onClick={() => setIsProvisionOpen(true)}>Provision First Account</Button>
+          }
         />
       ) : (
         <Table>
@@ -165,14 +227,27 @@ export const UsersPage = () => {
                       )}
 
                       {!isSelf && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => statusMutation.mutate({ id: u._id, isActive: !u.isActive })}
-                          className={`text-xs ${u.isActive ? 'text-destructive' : 'text-emerald-500'}`}
-                        >
-                          {u.isActive ? 'Deactivate' : 'Activate'}
-                        </Button>
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => revokeMutation.mutate(u._id)}
+                            isLoading={revokeMutation.isPending && revokeMutation.variables === u._id}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                            title="Revoke all active sessions for this user"
+                          >
+                            <LogOut className="h-3.5 w-3.5 mr-1" /> Revoke
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => statusMutation.mutate({ id: u._id, isActive: !u.isActive })}
+                            className={`text-xs ${u.isActive ? 'text-destructive' : 'text-emerald-500'}`}
+                          >
+                            {u.isActive ? 'Deactivate' : 'Activate'}
+                          </Button>
+                        </>
                       )}
                     </div>
                   </TableCell>
@@ -181,6 +256,83 @@ export const UsersPage = () => {
             })}
           </TableBody>
         </Table>
+      )}
+
+      {/* Provision Employee Modal */}
+      {isProvisionOpen && (
+        <Modal
+          isOpen={isProvisionOpen}
+          onClose={() => setIsProvisionOpen(false)}
+          title="Provision Enterprise Employee Account"
+          description="Create a verified employee account. Credentials can be rotated upon first sign in."
+        >
+          <form onSubmit={handleProvisionSubmit} className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">Full Name</label>
+              <Input
+                type="text"
+                placeholder="Jane Doe"
+                value={provisionName}
+                onChange={(e) => setProvisionName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">Enterprise Email</label>
+              <Input
+                type="email"
+                placeholder="jane.doe@enterprise.internal"
+                value={provisionEmail}
+                onChange={(e) => setProvisionEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">Temporary Password</label>
+              <Input
+                type="password"
+                placeholder="Min 8 chars, uppercase, number, symbol"
+                value={provisionPassword}
+                onChange={(e) => setProvisionPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Role</label>
+                <Select
+                  value={provisionRole}
+                  onChange={(e) => setProvisionRole(e.target.value)}
+                  options={[
+                    { value: 'EMPLOYEE', label: 'Employee' },
+                    { value: 'PROJECT_MANAGER', label: 'Project Manager' },
+                    { value: 'ADMIN', label: 'Admin' },
+                    ...(isSuperAdmin ? [{ value: 'SUPER_ADMIN', label: 'Super Admin' }] : []),
+                  ]}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Department</label>
+                <Input
+                  type="text"
+                  placeholder="Engineering"
+                  value={provisionDept}
+                  onChange={(e) => setProvisionDept(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-border">
+              <Button variant="secondary" type="button" onClick={() => setIsProvisionOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" isLoading={provisionMutation.isPending}>
+                Create Account
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {/* Change Role Modal */}
@@ -221,3 +373,5 @@ export const UsersPage = () => {
     </div>
   );
 };
+
+export default UsersPage;
