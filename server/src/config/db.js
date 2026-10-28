@@ -5,7 +5,9 @@ import { logger } from './logger.js';
 
 // Configure public DNS resolvers to prevent Windows SRV ECONNREFUSED with MongoDB Atlas
 try {
-  dns.setServers(['8.8.8.8', '1.1.1.1']);
+  if (process.platform === 'win32') {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  }
 } catch {
   // Ignore in restricted environments
 }
@@ -28,6 +30,17 @@ export const connectDatabase = async (uri = env.MONGODB_URI) => {
     return mongoose.connection;
   }
 
+  if (mongoose.connection.readyState === 2) {
+    await new Promise((resolve) => {
+      mongoose.connection.once('open', resolve);
+      mongoose.connection.once('error', resolve);
+    });
+    if (mongoose.connection.readyState === 1) {
+      isConnected = true;
+      return mongoose.connection;
+    }
+  }
+
   // Prevent requests from hanging indefinitely on buffering when disconnected
   mongoose.set('bufferTimeoutMS', 5000);
 
@@ -36,9 +49,11 @@ export const connectDatabase = async (uri = env.MONGODB_URI) => {
     const maskedUri = uri.replace(/\/\/.*@/, '//<credentials>@');
     logger.info(`Attempting database connection to: ${maskedUri}`);
 
+    const isProd = env.NODE_ENV === 'production';
     const conn = await mongoose.connect(uri, {
-      autoIndex: true,
-      serverSelectionTimeoutMS: 4000,
+      autoIndex: !isProd,
+      serverSelectionTimeoutMS: isProd ? 8000 : 4000,
+      maxPoolSize: isProd ? 10 : 5,
     });
 
     isConnected = true;

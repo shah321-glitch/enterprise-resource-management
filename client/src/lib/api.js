@@ -13,8 +13,11 @@ export const setAccessToken = (token) => {
 
 export const getAccessToken = () => accessToken;
 
+const rawBase = import.meta.env.VITE_API_URL || '/api/v1';
+export const API_BASE_URL = rawBase.replace(/\/+$/, '');
+
 export const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -69,7 +72,7 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const { data } = await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true });
+        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
         const newToken = data.data.accessToken;
         setAccessToken(newToken);
         processQueue(null, newToken);
@@ -88,4 +91,3 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
