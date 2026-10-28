@@ -166,8 +166,13 @@ export const createApp = () => {
   app.use(['/api/v1/health', '/health'], healthRoutes);
   app.get(['/api/v1/ready', '/ready'], readyHandler);
 
-  // Root endpoint - returns gateway status directly without redirect loops
-  app.get(['/', '/api', '/api/v1', '/api/index.js', '/server/api/index.js'], (req, res) => {
+  // Root redirects cleanly to /api/v1
+  app.get('/', (req, res) => {
+    res.redirect(302, '/api/v1');
+  });
+
+  // Gateway status endpoint
+  app.get(['/api', '/api/v1', '/api/index.js', '/server/api/index.js'], (req, res) => {
     if (req.accepts('html') && !req.accepts('json')) {
       return res.send(`<!DOCTYPE html>
 <html lang="en">
