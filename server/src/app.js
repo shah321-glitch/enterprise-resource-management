@@ -47,7 +47,8 @@ export const createApp = () => {
 
   // Security HTTP Headers
   app.use(helmet({
-    contentSecurityPolicy: env.NODE_ENV === 'production' ? undefined : false,
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
   }));
 
   // CORS configuration

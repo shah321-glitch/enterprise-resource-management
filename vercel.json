@@ -4,8 +4,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/index.js": {
-      "includeFiles": "server/**",
-      "maxDuration": 15
+      "includeFiles": "server/**"
     }
   },
   "rewrites": [

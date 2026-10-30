@@ -1,5 +1,6 @@
 import express from 'express';
-import { getDbDetails } from '../../config/db.js';
+import mongoose from 'mongoose';
+import { getDbDetails, connectDatabase } from '../../config/db.js';
 
 const router = express.Router();
 
@@ -11,7 +12,15 @@ export const healthHandler = (req, res) => {
   });
 };
 
-export const readyHandler = (req, res) => {
+export const readyHandler = async (req, res) => {
+  if (mongoose.connection.readyState !== 1) {
+    try {
+      await connectDatabase();
+    } catch {
+      // Checked via getDbDetails below
+    }
+  }
+
   const db = getDbDetails();
   if (!db.isConnected) {
     return res.status(503).json({
