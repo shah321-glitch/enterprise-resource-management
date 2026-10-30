@@ -3,9 +3,11 @@ import dns from 'dns';
 import { env } from './env.js';
 import { logger } from './logger.js';
 
-// Configure public DNS resolvers to ensure robust SRV resolution with MongoDB Atlas
+// Configure public DNS resolvers for SRV lookups only when not in cloud serverless sandboxes
 try {
-  dns.setServers(['8.8.8.8', '1.1.1.1']);
+  if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.NETLIFY) {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  }
 } catch {
   // Ignore in restricted environments
 }
@@ -37,10 +39,13 @@ export const connectDatabase = async (uri = env.MONGODB_URI) => {
   }
 
   if (mongoose.connection.readyState === 2) {
-    await new Promise((resolve) => {
-      mongoose.connection.once('open', resolve);
-      mongoose.connection.once('error', resolve);
-    });
+    await Promise.race([
+      new Promise((resolve) => {
+        mongoose.connection.once('open', resolve);
+        mongoose.connection.once('error', resolve);
+      }),
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ]);
     if (mongoose.connection.readyState === 1) {
       isConnected = true;
       return mongoose.connection;

@@ -8,24 +8,45 @@ export const errorHandler = (err, req, res, next) => {
     return next(err);
   }
 
-  // Handle known AppError instances
-  if (err instanceof AppError) {
-    logger.warn({
-      err: {
-        name: err.name,
-        message: err.message,
-        errorCode: err.errorCode,
-        statusCode: err.statusCode,
-        details: err.details,
-      },
-      path: req.originalUrl,
-      method: req.method,
-    }, 'Operational error handled');
+  // Handle known AppError instances and any operational errors with 4xx status codes
+  const statusCode = err.statusCode || err.status;
+  const isOperational =
+    err instanceof AppError ||
+    (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) ||
+    ['UnauthorizedError', 'ForbiddenError', 'NotFoundError', 'BadRequestError', 'ConflictError', 'ValidationError'].includes(err.name);
 
-    return res.status(err.statusCode).json({
+  if (isOperational) {
+    const finalStatus = statusCode || (err.name === 'UnauthorizedError' ? 401 : err.name === 'ForbiddenError' ? 403 : err.name === 'NotFoundError' ? 404 : 400);
+    const errorCode =
+      err.errorCode ||
+      err.code ||
+      (finalStatus === 401
+        ? 'UNAUTHORIZED'
+        : finalStatus === 403
+        ? 'FORBIDDEN'
+        : finalStatus === 404
+        ? 'NOT_FOUND'
+        : 'BAD_REQUEST');
+
+    logger.warn(
+      {
+        err: {
+          name: err.name,
+          message: err.message,
+          errorCode,
+          statusCode: finalStatus,
+          details: err.details,
+        },
+        path: req.originalUrl,
+        method: req.method,
+      },
+      'Operational error handled'
+    );
+
+    return res.status(finalStatus).json({
       success: false,
       error: {
-        code: err.errorCode,
+        code: errorCode,
         message: err.message,
         details: err.details || undefined,
       },
@@ -71,9 +92,27 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
 
+  // Handle Mongoose / MongoDB Connection or Timeout Errors
+  if (
+    err.name === 'MongooseServerSelectionError' ||
+    err.name === 'MongoServerSelectionError' ||
+    err.name === 'MongoNetworkError' ||
+    err.message?.includes('buffering timed out')
+  ) {
+    logger.error({ err: err.message, path: req.originalUrl }, 'Database connection error in request');
+    return res.status(503).json({
+      success: false,
+      error: {
+        code: 'DATABASE_UNAVAILABLE',
+        message: 'Database connection failed or timed out. Please check MongoDB Atlas network access and configuration.',
+      },
+    });
+  }
+
   // Unhandled / Internal Server Error
   logger.error({
     err: {
+      name: err.name,
       message: err.message,
       stack: err.stack,
     },
@@ -84,8 +123,8 @@ export const errorHandler = (err, req, res, next) => {
   return res.status(500).json({
     success: false,
     error: {
-      code: 'INTERNAL_ERROR',
-      message: env.NODE_ENV === 'production' ? 'An internal server error occurred' : err.message,
+      code: err.errorCode || 'INTERNAL_ERROR',
+      message: err.message || 'An internal server error occurred',
     },
   });
 };
