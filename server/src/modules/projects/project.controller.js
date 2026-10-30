@@ -51,3 +51,15 @@ export const updateProject = async (req, res, next) => {
   }
 };
 
+export const getProjectResources = async (req, res, next) => {
+  try {
+    const result = await projectService.getProjectResources(req.params.id);
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

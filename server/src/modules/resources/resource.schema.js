@@ -18,6 +18,7 @@ export const createResourceSchema = z.object({
     nextRenewalDate: z.string().datetime().optional().nullable(),
   }).optional(),
   notes: z.string().optional(),
+  subscriptionId: z.string().optional().nullable(),
 });
 
 export const updateResourceSchema = createResourceSchema.partial();

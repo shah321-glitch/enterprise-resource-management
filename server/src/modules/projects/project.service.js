@@ -21,7 +21,9 @@ export const listProjects = async (filters = {}) => {
 
   const [projects, total] = await Promise.all([
     Project.find(query)
-      .populate('leadId', 'name email department')
+      .populate('leadId', 'name email department role')
+      .populate('projectManagerId', 'name email department role')
+      .populate('teamMemberIds', 'name email department role')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -68,15 +70,19 @@ export const listProjects = async (filters = {}) => {
 };
 
 export const getProjectById = async (id) => {
-  const project = await Project.findById(id).populate('leadId', 'name email department').lean();
+  const project = await Project.findById(id)
+    .populate('leadId', 'name email department role')
+    .populate('projectManagerId', 'name email department role')
+    .populate('teamMemberIds', 'name email department role')
+    .lean();
   if (!project) {
     throw new NotFoundError('Project not found');
   }
 
   // Fetch active and past allocations for this project
   const allocations = await ResourceAllocation.find({ projectId: id })
-    .populate('resourceId', 'name provider category costInCents status')
-    .populate('assignedEmployeeId', 'name email department')
+    .populate('resourceId', 'name provider category costInCents currency status')
+    .populate('assignedEmployeeId', 'name email department role')
     .sort({ createdAt: -1 })
     .lean();
 
@@ -86,8 +92,41 @@ export const getProjectById = async (id) => {
 
   return {
     ...project,
+    manager: project.projectManagerId || project.leadId,
     allocations,
     totalAllocatedCostInCents,
+  };
+};
+
+export const getProjectResources = async (projectId) => {
+  const project = await Project.findById(projectId);
+  if (!project) {
+    throw new NotFoundError('Project not found');
+  }
+
+  const allocations = await ResourceAllocation.find({ projectId })
+    .populate('resourceId', 'name provider category resourceType costInCents currency status notes')
+    .populate('assignedEmployeeId', 'name email department role')
+    .sort({ status: 1, createdAt: -1 })
+    .lean();
+
+  return {
+    projectId,
+    projectName: project.name,
+    resources: allocations.map((a) => ({
+      allocationId: a._id,
+      resource: a.resourceId,
+      assignedEmployee: a.assignedEmployeeId,
+      allocationMethod: a.allocationMethod,
+      allocationValue: a.allocationValue,
+      calculatedCostInCents: a.calculatedCostInCents,
+      currency: a.currency,
+      status: a.status,
+      startDate: a.startDate,
+      endDate: a.endDate,
+      usageLimit: a.usageLimit,
+      notes: a.notes,
+    })),
   };
 };
 
@@ -97,10 +136,13 @@ export const createProject = async (data, actorUser, req = null) => {
     throw new ConflictError(`Project code '${data.code}' is already taken`);
   }
 
+  const managerId = data.projectManagerId || data.leadId || actorUser?._id;
+
   const project = new Project({
     ...data,
     code: data.code.toUpperCase(),
-    leadId: data.leadId || actorUser?._id,
+    leadId: managerId,
+    projectManagerId: managerId,
   });
 
   await project.save();
@@ -130,6 +172,12 @@ export const updateProject = async (id, data, actorUser, req = null) => {
       throw new ConflictError(`Project code '${data.code}' is already in use`);
     }
     data.code = data.code.toUpperCase();
+  }
+
+  if (data.projectManagerId) {
+    data.leadId = data.projectManagerId;
+  } else if (data.leadId) {
+    data.projectManagerId = data.leadId;
   }
 
   Object.assign(project, data);

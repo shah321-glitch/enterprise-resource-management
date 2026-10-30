@@ -78,6 +78,10 @@ export const createApp = () => {
     if (req.path === '/favicon.ico') {
       return res.status(204).end();
     }
+    // Skip synchronous DB auto-connection on root status and basic health probes for instant readiness
+    if (req.path === '/' || req.path === '/health' || req.path === '/api/v1/health' || req.path === '/ready' || req.path === '/api/v1/ready') {
+      return next();
+    }
     if (mongoose.connection.readyState !== 1) {
       try {
         await connectDatabase();
@@ -205,9 +209,9 @@ export const createApp = () => {
     next();
   };
 
-  app.use('/api/v1', dbGuard);
+  app.use(['/api/v1', '/api'], dbGuard);
 
-  // Mount Feature Module Routes for both /api/v1 and unprefixed aliases
+  // Mount Feature Module Routes for both /api/v1, /api, and unprefixed aliases
   const mountModuleRoutes = (prefix = '') => {
     app.use(`${prefix}/auth`, authRoutes);
     app.use(`${prefix}/users`, userRoutes);
@@ -224,6 +228,7 @@ export const createApp = () => {
   };
 
   mountModuleRoutes('/api/v1');
+  mountModuleRoutes('/api');
   mountModuleRoutes('');
 
   // 404 Catch-all for undefined routes

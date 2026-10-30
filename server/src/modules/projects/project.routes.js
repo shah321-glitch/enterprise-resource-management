@@ -11,6 +11,7 @@ router.use(authenticate);
 
 router.get('/', projectController.listProjects);
 router.get('/:id', projectController.getProjectById);
+router.get('/:id/resources', projectController.getProjectResources);
 router.post('/', requireProjectManagerOrAdmin, validate({ body: createProjectSchema }), projectController.createProject);
 router.put('/:id', requireProjectManagerOrAdmin, validate({ body: updateProjectSchema }), projectController.updateProject);
 

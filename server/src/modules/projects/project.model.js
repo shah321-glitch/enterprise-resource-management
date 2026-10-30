@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-export const PROJECT_STATUSES = ['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'ARCHIVED'];
+export const PROJECT_STATUSES = ['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED', 'ARCHIVED'];
 
 const projectSchema = new mongoose.Schema({
   name: {
@@ -33,11 +33,23 @@ const projectSchema = new mongoose.Schema({
   targetEndDate: {
     type: Date,
   },
+  endDate: {
+    type: Date,
+  },
   leadId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     index: true,
   },
+  projectManagerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+  },
+  teamMemberIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  }],
   department: {
     type: String,
     trim: true,

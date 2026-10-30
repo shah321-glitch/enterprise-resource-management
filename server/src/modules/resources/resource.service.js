@@ -1,4 +1,5 @@
 import { Resource } from './resource.model.js';
+import { ResourceAllocation } from '../allocations/allocation.model.js';
 import { NotFoundError } from '../../utils/errors.js';
 import { createAuditLog } from '../audit-logs/audit-log.service.js';
 
@@ -61,12 +62,38 @@ export const listResources = async (filters = {}) => {
 
 export const getResourceById = async (id) => {
   const resource = await Resource.findById(id)
-    .populate('ownerId', 'name email department')
+    .populate('ownerId', 'name email department role')
+    .populate('subscriptionId', 'name provider billingCycle costInCents status')
     .lean();
   if (!resource) {
     throw new NotFoundError('Resource not found');
   }
-  return resource;
+
+  // Fetch active allocations across projects for this resource
+  const allocations = await ResourceAllocation.find({ resourceId: id })
+    .populate('projectId', 'name code status department')
+    .populate('assignedEmployeeId', 'name email department role')
+    .sort({ status: 1, createdAt: -1 })
+    .lean();
+
+  const activeAllocations = allocations.filter((a) => a.status === 'ACTIVE');
+  const totalAllocatedPercentage = activeAllocations
+    .filter((a) => a.allocationMethod === 'PERCENTAGE')
+    .reduce((sum, a) => sum + (a.allocationValue || 0), 0);
+
+  const totalAllocatedCostInCents = activeAllocations.reduce(
+    (sum, a) => sum + (a.calculatedCostInCents || 0),
+    0
+  );
+
+  return {
+    ...resource,
+    allocations,
+    activeAllocationsCount: activeAllocations.length,
+    totalAllocatedPercentage,
+    totalAllocatedCostInCents,
+    unallocatedCostInCents: Math.max(0, resource.costInCents - totalAllocatedCostInCents),
+  };
 };
 
 export const createResource = async (data, actorUser, req = null) => {

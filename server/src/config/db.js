@@ -3,11 +3,9 @@ import dns from 'dns';
 import { env } from './env.js';
 import { logger } from './logger.js';
 
-// Configure public DNS resolvers to prevent Windows SRV ECONNREFUSED with MongoDB Atlas
+// Configure public DNS resolvers to ensure robust SRV resolution with MongoDB Atlas
 try {
-  if (process.platform === 'win32') {
-    dns.setServers(['8.8.8.8', '1.1.1.1']);
-  }
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
 } catch {
   // Ignore in restricted environments
 }
@@ -69,8 +67,36 @@ export const connectDatabase = async (uri = env.MONGODB_URI) => {
     } catch (primaryError) {
       logger.warn({ err: primaryError.message }, 'Primary MongoDB connection failed.');
 
-      // 2. In development, auto-fallback to local in-memory MongoDB instance
-      if (env.NODE_ENV === 'development') {
+      // 1b. If SRV resolution failed, attempt direct replica-set host connection
+      if (uri.includes('+srv') && uri.includes('cluster0.3g6ejrh.mongodb.net')) {
+        try {
+          const directUri = uri
+            .replace('mongodb+srv://', 'mongodb://')
+            .replace(
+              'cluster0.3g6ejrh.mongodb.net',
+              'ac-r6lr13p-shard-00-00.3g6ejrh.mongodb.net:27017,ac-r6lr13p-shard-00-01.3g6ejrh.mongodb.net:27017,ac-r6lr13p-shard-00-02.3g6ejrh.mongodb.net:27017'
+            ) + (uri.includes('?') ? '&' : '?') + 'ssl=true&replicaSet=atlas-hgwona-shard-0&authSource=admin';
+
+          logger.info('Attempting direct replica-set fallback connection to MongoDB Atlas...');
+          const isProd = env.NODE_ENV === 'production';
+          const directConn = await mongoose.connect(directUri, {
+            autoIndex: !isProd,
+            serverSelectionTimeoutMS: 8000,
+            maxPoolSize: isProd ? 10 : 5,
+          });
+
+          isConnected = true;
+          activeConnectionMode = 'DIRECT_REPLICA_SET_FALLBACK';
+          logger.info(`Connected to MongoDB Atlas via direct replica-set fallback: ${directConn.connection.host}`);
+          return directConn.connection;
+        } catch (directErr) {
+          logger.warn({ err: directErr.message }, 'Direct replica-set fallback connection also failed');
+        }
+      }
+
+      // 2. In local development (NOT serverless / Vercel), auto-fallback to local in-memory MongoDB instance
+      const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
+      if (env.NODE_ENV === 'development' && !isServerless) {
         try {
           logger.info('Initializing local development in-memory MongoDB database...');
           const { MongoMemoryServer } = await import('mongodb-memory-server');

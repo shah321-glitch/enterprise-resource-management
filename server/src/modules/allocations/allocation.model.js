@@ -63,6 +63,15 @@ const allocationSchema = new mongoose.Schema({
     type: Number,
   },
   notes: String,
+  releasedAt: Date,
+  reassignedToId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ResourceAllocation',
+  },
+  reassignedFromId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ResourceAllocation',
+  },
 }, {
   timestamps: true,
 });

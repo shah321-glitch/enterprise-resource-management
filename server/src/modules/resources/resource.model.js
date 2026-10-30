@@ -89,6 +89,11 @@ const resourceSchema = new mongoose.Schema({
   notes: {
     type: String,
   },
+  subscriptionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Subscription',
+    index: true,
+  },
 }, {
   timestamps: true,
 });
