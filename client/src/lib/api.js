@@ -16,8 +16,8 @@ export const getAccessToken = () => accessToken;
 let rawBase = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api/v1';
 rawBase = rawBase.trim().replace(/\/+$/, '');
 
-// If deployed unified on Vercel, use relative /api/v1 so requests stay same-origin and eliminate CORS & preview redirects
-if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+// If deployed unified on Vercel or same-origin, use relative /api/v1 so requests stay same-origin and eliminate CORS & preview redirects
+if (typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || !rawBase.startsWith('http'))) {
   rawBase = '/api/v1';
 } else if (rawBase.includes('.vercel.app')) {
   // Auto-sanitize preview deployment URLs with Vercel Authentication to production domain

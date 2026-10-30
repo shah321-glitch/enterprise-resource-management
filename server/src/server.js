@@ -45,5 +45,13 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+} else {
+  connectDatabase().catch((err) => {
+    logger.warn({ err: err.message }, 'Initial DB connection attempt on Vercel cold start');
+  });
+}
+
+export default app;
 
